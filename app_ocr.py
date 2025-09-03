@@ -13,17 +13,34 @@ load_dotenv()
 
 # AI helpers (Azure OpenAI or OpenAI) - Define functions first
 def _has_azure_openai():
-    return bool(os.getenv("AZURE_OPENAI_ENDPOINT") and (os.getenv("AZURE_OPENAI_KEY") or os.getenv("AZURE_OPENAI_API_KEY")) and os.getenv("AZURE_OPENAI_DEPLOYMENT"))
+    endpoint = get_config_value("AZURE_OPENAI_ENDPOINT")
+    key = get_config_value("AZURE_OPENAI_KEY") or get_config_value("AZURE_OPENAI_API_KEY")
+    deployment = get_config_value("AZURE_OPENAI_DEPLOYMENT")
+    return bool(endpoint and key and deployment)
 
 def _has_openai_key():
-    return bool(os.getenv("OPENAI_API_KEY"))
+    return bool(get_config_value("OPENAI_API_KEY"))
 
-# Configuration from .env
-ENDPOINT = os.getenv("AZURE_DI_ENDPOINT") or os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
-API_KEY = os.getenv("AZURE_DI_KEY") or os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+# Configuration from .env or Streamlit secrets
+def get_config_value(key: str, default: str = None):
+    """Get configuration value from environment variables or Streamlit secrets."""
+    # Try environment variables first (for local development)
+    value = os.getenv(key, default)
+    
+    # Try Streamlit secrets (for cloud deployment)
+    if not value and hasattr(st, 'secrets'):
+        try:
+            value = st.secrets.get(key, default)
+        except (KeyError, FileNotFoundError):
+            pass
+    
+    return value
+
+ENDPOINT = get_config_value("AZURE_DI_ENDPOINT") or get_config_value("AZURE_FORM_RECOGNIZER_ENDPOINT")
+API_KEY = get_config_value("AZURE_DI_KEY") or get_config_value("AZURE_FORM_RECOGNIZER_KEY")
 # Use layout model for OCR and table extraction
-MODEL_ID = os.getenv("AZURE_DI_MODEL_ID", "prebuilt-layout")
-API_VERSION = os.getenv("AZURE_DI_API_VERSION", "2023-07-31")
+MODEL_ID = get_config_value("AZURE_DI_MODEL_ID", "prebuilt-layout")
+API_VERSION = get_config_value("AZURE_DI_API_VERSION", "2023-07-31")
 
 st.set_page_config(page_title="OCR → Material Properties Extractor", layout="wide")
 
@@ -49,7 +66,33 @@ with col2:
     st.write("")
 
 if not ENDPOINT or not API_KEY:
-    st.error("Missing credentials: please add AZURE_DI_ENDPOINT and AZURE_DI_KEY (or AZURE_FORM_RECOGNIZER_ENDPOINT / AZURE_FORM_RECOGNIZER_KEY) to your .env file.")
+    st.error("🔑 **Missing Azure Document Intelligence credentials**")
+    
+    with st.expander("📋 How to configure credentials", expanded=True):
+        st.markdown("""
+        **For local development:**
+        1. Copy `.env.template` to `.env`
+        2. Add your Azure Document Intelligence resource details:
+        
+        ```bash
+        AZURE_DI_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com/
+        AZURE_DI_KEY=your_32_character_api_key_here
+        ```
+        
+        **For Streamlit Cloud deployment:**
+        1. Go to your app settings in Streamlit Cloud
+        2. Click "Secrets" and add:
+        
+        ```toml
+        AZURE_DI_ENDPOINT = "https://your-resource-name.cognitiveservices.azure.com/"
+        AZURE_DI_KEY = "your_32_character_api_key_here"
+        ```
+        
+        **Get credentials from Azure Portal:**
+        - Create a Document Intelligence resource
+        - Go to "Keys and Endpoint" to copy values
+        """)
+    
     st.info("💡 **Demo Mode Available**: You can still upload files to test the UI. The app will simulate OCR results for demonstration purposes.")
 
 # try to detect public IP for diagnostics (non-blocking)
