@@ -1,13 +1,22 @@
 import os
 import io
 import json
+import re
 import time
 import requests
 import streamlit as st
 from dotenv import load_dotenv
 from typing import Optional
+from datetime import datetime
 
 load_dotenv()
+
+# AI helpers (Azure OpenAI or OpenAI) - Define functions first
+def _has_azure_openai():
+    return bool(os.getenv("AZURE_OPENAI_ENDPOINT") and (os.getenv("AZURE_OPENAI_KEY") or os.getenv("AZURE_OPENAI_API_KEY")) and os.getenv("AZURE_OPENAI_DEPLOYMENT"))
+
+def _has_openai_key():
+    return bool(os.getenv("OPENAI_API_KEY"))
 
 # Configuration from .env
 ENDPOINT = os.getenv("AZURE_DI_ENDPOINT") or os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
@@ -20,17 +29,28 @@ st.set_page_config(page_title="OCR → Material Properties Extractor", layout="w
 
 st.title("Smart Document Analyzer → Material & Chemical Properties Extractor")
 
-# Model selection UI: let the user choose which Document Intelligence model to use
-model_options = []
-# start with env/default model
-model_options.append(MODEL_ID)
-for opt in ("prebuilt-layout", "prebuilt-read"):
-    if opt not in model_options:
-        model_options.append(opt)
-selected_model = st.sidebar.selectbox("Select Document Intelligence model", options=model_options, index=0, help="Choose which model to use for extraction. 'prebuilt-layout' extracts tables and layout; 'prebuilt-read' focuses on OCR text.")
+# Model selection UI in main area
+st.subheader("Configuration")
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    # Model selection UI: let the user choose which Document Intelligence model to use
+    model_options = []
+    # start with env/default model
+    model_options.append(MODEL_ID)
+    for opt in ("prebuilt-layout", "prebuilt-read"):
+        if opt not in model_options:
+            model_options.append(opt)
+    selected_model = st.selectbox("Select Document Intelligence model", options=model_options, index=0, help="Choose which model to use for extraction. 'prebuilt-layout' extracts tables and layout; 'prebuilt-read' focuses on OCR text.")
+
+with col2:
+    # AI configuration status hidden per user request
+    # (Previously showed Azure/OpenAI configured or warning messages.)
+    st.write("")
 
 if not ENDPOINT or not API_KEY:
     st.error("Missing credentials: please add AZURE_DI_ENDPOINT and AZURE_DI_KEY (or AZURE_FORM_RECOGNIZER_ENDPOINT / AZURE_FORM_RECOGNIZER_KEY) to your .env file.")
+    st.info("💡 **Demo Mode Available**: You can still upload files to test the UI. The app will simulate OCR results for demonstration purposes.")
 
 # try to detect public IP for diagnostics (non-blocking)
 pub_ip = None
@@ -41,21 +61,36 @@ try:
 except Exception:
     pub_ip = None
 
-if pub_ip:
-    st.sidebar.markdown(f"**Detected public IP:** `{pub_ip}`")
-    st.sidebar.markdown("If you get a 403, add this IP to the Networking → Allowed IPs in the Azure Portal.")
-
-# AI helpers (Azure OpenAI or OpenAI)
-def _has_azure_openai():
-    return bool(os.getenv("AZURE_OPENAI_ENDPOINT") and (os.getenv("AZURE_OPENAI_KEY") or os.getenv("AZURE_OPENAI_API_KEY")) and os.getenv("AZURE_OPENAI_DEPLOYMENT"))
-
-def _has_openai_key():
-    return bool(os.getenv("OPENAI_API_KEY"))
-
 def call_document_intelligence_ocr(file_bytes: bytes, content_type: str = "application/octet-stream", model_id: str = None):
     """Call Document Intelligence read/OCR model to extract text from document."""
     if not ENDPOINT or not API_KEY:
-        raise RuntimeError("Missing endpoint or API key")
+        # Demo mode - simulate OCR result
+        st.warning("🔧 Demo Mode: Simulating OCR results (no real Azure call made)")
+        return {
+            "status": "succeeded",
+            "analyzeResult": {
+                "content": "DEMO CONTENT: This is simulated OCR text for testing purposes.\n\nChemical Composition:\nCarbon: 0.25%\nManganese: 1.2%\nSilicon: 0.4%\n\nMaterial Properties:\nYield Strength: 250 MPa\nTensile Strength: 400 MPa\nHardness: 180 HV\n\nTest Results:\nImpact Energy: 45 J\nElongation: 22%",
+                "pages": [
+                    {
+                        "spans": [{"offset": 0, "length": 200}],
+                        "words": []
+                    }
+                ],
+                "tables": [
+                    {
+                        "id": "demo_table_1",
+                        "cells": [
+                            {"rowIndex": 0, "columnIndex": 0, "content": "Element"},
+                            {"rowIndex": 0, "columnIndex": 1, "content": "Percentage"},
+                            {"rowIndex": 1, "columnIndex": 0, "content": "Carbon"},
+                            {"rowIndex": 1, "columnIndex": 1, "content": "0.25%"},
+                            {"rowIndex": 2, "columnIndex": 0, "content": "Manganese"},
+                            {"rowIndex": 2, "columnIndex": 1, "content": "1.2%"}
+                        ]
+                    }
+                ]
+            }
+        }
 
     # Allow caller to override the model (UI selection). Fall back to default MODEL_ID.
     model_to_use = model_id or MODEL_ID
@@ -260,7 +295,7 @@ def categorize_tables_with_ai(tables: list, timeout: int = 30) -> Optional[dict]
         
         return parsed
     except Exception as e:
-        st.sidebar.error(f"AI table categorization failed: {e}")
+        st.error(f"AI table categorization failed: {e}")
         return None
 
 def find_json_in_text(s: str):
@@ -360,7 +395,7 @@ def extract_properties_with_ai(text: str, timeout: int = 30) -> Optional[list]:
         parsed = find_json_in_text(content)
         return parsed
     except Exception as e:
-        st.sidebar.error(f"AI properties extraction failed: {e}")
+        st.error(f"AI properties extraction failed: {e}")
         return None
 
 def generate_tables_with_ai(text: str, timeout: int = 30) -> Optional[dict]:
@@ -426,7 +461,7 @@ def generate_tables_with_ai(text: str, timeout: int = 30) -> Optional[dict]:
         
         return parsed
     except Exception as e:
-        st.sidebar.error(f"AI table generation failed: {e}")
+        st.error(f"AI table generation failed: {e}")
         return None
 
 def display_ai_generated_tables(ai_tables: dict, uploaded_file, extracted_text: str):
@@ -489,27 +524,300 @@ def display_ai_generated_tables(ai_tables: dict, uploaded_file, extracted_text: 
             else:
                 st.info("Table structure could not be generated properly")
     
+    # Generate JSON from AI tables
+    st.write("**Generating JSON file from AI-generated tables...**")
+    # Convert AI tables to format compatible with extract_values_from_tables_and_text
+    all_tables = []
+    for table in chemical_tables + material_tables:
+        all_tables.append({
+            'headers': table.get('headers', []),
+            'rows': table.get('rows', [])
+        })
+    
+    extracted_data = extract_values_from_tables_and_text(all_tables, extracted_text)
+    generated_json = generate_json_from_template(extracted_data, uploaded_file.name if uploaded_file else 'document')
+    st.success("✓ Generated JSON file using sample.json template")
+    
+    # Show preview of generated JSON
+    with st.expander("Preview Generated JSON"):
+        st.json(generated_json)
+    
     # Provide downloads
     base_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file is not None and getattr(uploaded_file, 'name', None) else 'document'
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
+        json_fname = f"{base_name}.mtr.json"
+        st.download_button(
+            "📋 Download MTR JSON", 
+            data=json.dumps(generated_json, indent=2), 
+            file_name=json_fname, 
+            mime="application/json"
+        )
+    
+    with col2:
         tables_fname = f"{base_name}.ai_generated_tables.json"
         st.download_button(
-            "Download AI Generated Tables", 
+            "📊 Download AI Generated Tables", 
             data=json.dumps(ai_tables, indent=2), 
             file_name=tables_fname, 
             mime="application/json"
         )
     
-    with col2:
+    with col3:
         text_fname = f"{base_name}.extracted_text.txt"
         st.download_button(
-            "Download Extracted Text", 
+            "📄 Download Extracted Text", 
             data=extracted_text, 
             file_name=text_fname, 
             mime="text/plain"
         )
+
+def load_sample_json_template():
+    """Load the sample JSON template structure."""
+    try:
+        sample_path = os.path.join(os.path.dirname(__file__), "Sample json", "sample.json")
+        with open(sample_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        st.warning(f"Could not load sample.json template: {e}")
+        # Fallback minimal template
+        return {
+            "CompanyMTRFileID": 0,
+            "HeatNumber": "",
+            "ZNumber": "",
+            "CertificationDate": "",
+            "HNPipeDetails": [{
+                "PipeNumber": "",
+                "Grade": "",
+                "HNPipeHeatChemicalResults": {},
+                "HNPipeChemicalCompResults": {},
+                "HNPipeTensileTestResults": {},
+                "HNPipeCVNResults": {},
+                "HNPipeHardnessResults": {}
+            }]
+        }
+
+def extract_values_from_tables_and_text(tables: list, extracted_text: str) -> dict:
+    """Extract values from tables and text to populate JSON template."""
+    extracted_data = {
+        "chemical_composition": {},
+        "tensile_properties": {},
+        "hardness": {},
+        "cvn_properties": {},
+        "general_info": {}
+    }
+    
+    # Extract from tables first
+    for table in tables:
+        headers = table.get('headers', [])
+        rows = table.get('rows', [])
+        
+        if not headers or not rows:
+            continue
+            
+        # Process each row
+        for row in rows:
+            if len(row) >= 2:
+                prop_name = str(row[0]).strip().lower()
+                prop_value = str(row[1]).strip()
+                
+                # Chemical elements mapping
+                chemical_mapping = {
+                    'carbon': 'C', 'c': 'C',
+                    'manganese': 'Mn', 'mn': 'Mn',
+                    'phosphorus': 'P', 'p': 'P',
+                    'sulfur': 'S', 's': 'S', 'sulphur': 'S',
+                    'silicon': 'Si', 'si': 'Si',
+                    'niobium': 'CbNb', 'nb': 'CbNb', 'columbium': 'CbNb',
+                    'titanium': 'Ti', 'ti': 'Ti',
+                    'copper': 'Cu', 'cu': 'Cu',
+                    'nickel': 'Ni', 'ni': 'Ni',
+                    'molybdenum': 'Mo', 'mo': 'Mo',
+                    'chromium': 'Cr', 'cr': 'Cr',
+                    'vanadium': 'V', 'v': 'V',
+                    'aluminum': 'Al', 'al': 'Al', 'aluminium': 'Al',
+                    'boron': 'B', 'b': 'B',
+                    'nitrogen': 'N', 'n': 'N',
+                    'calcium': 'Ca', 'ca': 'Ca'
+                }
+                
+                # Check if it's a chemical element
+                for key, symbol in chemical_mapping.items():
+                    if key in prop_name:
+                        # Clean percentage sign and extract numeric value
+                        clean_value = re.sub(r'[%\s]', '', prop_value)
+                        try:
+                            float(clean_value)  # Validate it's numeric
+                            extracted_data["chemical_composition"][symbol] = clean_value
+                        except ValueError:
+                            pass
+                        break
+                
+                # Tensile properties
+                if any(keyword in prop_name for keyword in ['yield', 'tensile', 'strength', 'elongation']):
+                    if 'yield' in prop_name:
+                        clean_value = re.sub(r'[^\d.]', '', prop_value)
+                        try:
+                            float(clean_value)
+                            extracted_data["tensile_properties"]["YieldStrength"] = clean_value
+                        except ValueError:
+                            pass
+                    elif 'tensile' in prop_name or 'ultimate' in prop_name:
+                        clean_value = re.sub(r'[^\d.]', '', prop_value)
+                        try:
+                            float(clean_value)
+                            extracted_data["tensile_properties"]["UltimateTensileStrength"] = clean_value
+                        except ValueError:
+                            pass
+                    elif 'elongation' in prop_name:
+                        clean_value = re.sub(r'[%\s]', '', prop_value)
+                        try:
+                            float(clean_value)
+                            extracted_data["tensile_properties"]["ElongationPercentage"] = clean_value
+                        except ValueError:
+                            pass
+                
+                # Hardness
+                if 'hardness' in prop_name:
+                    clean_value = re.sub(r'[^\d.]', '', prop_value)
+                    try:
+                        float(clean_value)
+                        extracted_data["hardness"]["MaximumHardness"] = clean_value
+                    except ValueError:
+                        pass
+                
+                # CVN/Impact properties
+                if any(keyword in prop_name for keyword in ['impact', 'cvn', 'charpy', 'energy']):
+                    clean_value = re.sub(r'[^\d.]', '', prop_value)
+                    try:
+                        float(clean_value)
+                        extracted_data["cvn_properties"]["CVNAbsorbedEnergyAverage"] = clean_value
+                    except ValueError:
+                        pass
+    
+    # Extract additional info from text using regex patterns
+    text_lower = extracted_text.lower()
+    
+    # Try to find heat number
+    heat_patterns = [r'heat\s*(?:no|number|#)?\s*:?\s*([a-z0-9]+)', r'heat\s+([a-z0-9]+)']
+    for pattern in heat_patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            extracted_data["general_info"]["HeatNumber"] = match.group(1).upper()
+            break
+    
+    # Try to find grade
+    grade_patterns = [r'grade\s*:?\s*([a-z0-9]+)', r'api\s*5l\s*([a-z0-9]+)', r'x(\d+)']
+    for pattern in grade_patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            extracted_data["general_info"]["Grade"] = match.group(1).upper()
+            break
+    
+    return extracted_data
+
+def generate_json_from_template(extracted_data: dict, uploaded_filename: str = "document") -> dict:
+    """Generate JSON using sample.json template and extracted data."""
+    template = load_sample_json_template()
+    
+    # Update top-level fields
+    current_date = datetime.now().strftime("%m/%d/%Y")
+    template["CertificationDate"] = current_date
+    
+    if "HeatNumber" in extracted_data["general_info"]:
+        template["HeatNumber"] = extracted_data["general_info"]["HeatNumber"]
+    else:
+        template["HeatNumber"] = "EXTRACTED_" + datetime.now().strftime("%Y%m%d")
+    
+    # Update pipe details (assuming single pipe for now)
+    if template.get("HNPipeDetails") and len(template["HNPipeDetails"]) > 0:
+        pipe_detail = template["HNPipeDetails"][0]
+        
+        # Update general pipe info
+        if "Grade" in extracted_data["general_info"]:
+            pipe_detail["Grade"] = extracted_data["general_info"]["Grade"]
+        
+        pipe_detail["PipeNumber"] = os.path.splitext(uploaded_filename)[0].upper()
+        
+        # Update chemical composition (Heat)
+        heat_chem = pipe_detail.get("HNPipeHeatChemicalResults", {})
+        for element, value in extracted_data["chemical_composition"].items():
+            if element == 'C':
+                heat_chem["HeatC"] = value
+            elif element == 'Mn':
+                heat_chem["HeatMn"] = value
+            elif element == 'P':
+                heat_chem["HeatP"] = value
+            elif element == 'S':
+                heat_chem["HeatS"] = value
+            elif element == 'Si':
+                heat_chem["HeatSi"] = value
+            elif element == 'CbNb':
+                heat_chem["HeatCbNb"] = value
+            elif element == 'Ti':
+                heat_chem["HeatTi"] = value
+            elif element == 'Cu':
+                heat_chem["HeatCu"] = value
+            elif element == 'Ni':
+                heat_chem["HeatNi"] = value
+            elif element == 'Mo':
+                heat_chem["HeatMo"] = value
+            elif element == 'Cr':
+                heat_chem["HeatCr"] = value
+            elif element == 'V':
+                heat_chem["HeatV"] = value
+            elif element == 'Al':
+                heat_chem["HeatAl"] = value
+            elif element == 'B':
+                heat_chem["HeatB"] = value
+            elif element == 'N':
+                heat_chem["HeatN"] = value
+            elif element == 'Ca':
+                heat_chem["HeatCa"] = value
+        
+        # Update chemical composition (Product)
+        product_chem = pipe_detail.get("HNPipeChemicalCompResults", {})
+        for element, value in extracted_data["chemical_composition"].items():
+            if element == 'C':
+                product_chem["Product1C"] = value
+                product_chem["Product2C"] = value
+            elif element == 'Mn':
+                product_chem["Product1Mn"] = value
+                product_chem["Product2Mn"] = value
+            elif element == 'P':
+                product_chem["Product1P"] = value
+                product_chem["Product2P"] = value
+            elif element == 'S':
+                product_chem["Product1S"] = value
+                product_chem["Product2S"] = value
+            elif element == 'Si':
+                product_chem["Product1Si"] = value
+                product_chem["Product2Si"] = value
+            elif element == 'CbNb':
+                product_chem["Product1CbNb"] = value
+                product_chem["Product2CbNb"] = value
+            # Add other elements as needed...
+        
+        # Update tensile test results
+        tensile_results = pipe_detail.get("HNPipeTensileTestResults", {})
+        for prop, value in extracted_data["tensile_properties"].items():
+            if prop in tensile_results:
+                tensile_results[prop] = value
+        
+        # Update hardness results
+        hardness_results = pipe_detail.get("HNPipeHardnessResults", {})
+        for prop, value in extracted_data["hardness"].items():
+            if prop in hardness_results:
+                hardness_results[prop] = value
+        
+        # Update CVN results
+        cvn_results = pipe_detail.get("HNPipeCVNResults", {})
+        for prop, value in extracted_data["cvn_properties"].items():
+            if prop in cvn_results:
+                cvn_results[prop] = value
+    
+    return template
 
 def display_properties_fallback(properties: list, uploaded_file, extracted_text: str):
     """Display properties in the original format as fallback."""
@@ -566,55 +874,71 @@ def display_properties_fallback(properties: list, uploaded_file, extracted_text:
             })
         st.table(other_rows)
     
+    # Generate JSON from properties
+    st.write("**Generating JSON file from extracted properties...**")
+    # Convert properties to table format for processing
+    mock_tables = []
+    for prop in properties:
+        mock_tables.append({
+            'headers': ['Property', 'Value'],
+            'rows': [[prop.get('property', ''), prop.get('value', '')]]
+        })
+    
+    extracted_data = extract_values_from_tables_and_text(mock_tables, extracted_text)
+    generated_json = generate_json_from_template(extracted_data, uploaded_file.name if uploaded_file else 'document')
+    st.success("✓ Generated JSON file using sample.json template")
+    
+    # Show preview of generated JSON
+    with st.expander("Preview Generated JSON"):
+        st.json(generated_json)
+    
     # Provide downloads
     base_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file is not None and getattr(uploaded_file, 'name', None) else 'document'
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
+        json_fname = f"{base_name}.mtr.json"
+        st.download_button(
+            "📋 Download MTR JSON", 
+            data=json.dumps(generated_json, indent=2), 
+            file_name=json_fname, 
+            mime="application/json"
+        )
+    
+    with col2:
         props_fname = f"{base_name}.properties.json"
         st.download_button(
-            "Download Properties JSON", 
+            "📊 Download Properties JSON", 
             data=json.dumps(properties, indent=2), 
             file_name=props_fname, 
             mime="application/json"
         )
     
-    with col2:
+    with col3:
         text_fname = f"{base_name}.extracted_text.txt"
         st.download_button(
-            "Download Extracted Text", 
+            "📄 Download Extracted Text", 
             data=extracted_text, 
             file_name=text_fname, 
             mime="text/plain"
         )
 
 # Streamlit layout
-st.sidebar.header("Smart Analysis Settings")
-st.sidebar.write("Model: %s" % selected_model)
-
-# Show AI configuration status
-if _has_azure_openai():
-    st.sidebar.success("✓ Azure OpenAI configured")
-elif _has_openai_key():
-    st.sidebar.success("✓ OpenAI configured")
-else:
-    st.sidebar.warning("⚠ No AI credentials found - add AZURE_OPENAI_* or OPENAI_API_KEY to .env")
-
 uploaded_file = st.file_uploader("Upload document (PDF / JPG / PNG)", type=["pdf", "jpg", "jpeg", "png"], accept_multiple_files=False)
-run_button = st.button("Run Smart Analysis (Layout → OCR → AI)")
+run_button = st.button("Run Smart Analysis (Selected Model → AI)")
 
 if uploaded_file is not None:
-    st.sidebar.write(f"Uploaded: {uploaded_file.name} ({uploaded_file.type})")
+    st.write(f"Uploaded: {uploaded_file.name} ({uploaded_file.type})")
 
 if run_button:
     if uploaded_file is None:
         st.warning("Please upload a file before running.")
     else:
-        with st.spinner("Running smart analysis (Layout → OCR → AI)..."):
+        with st.spinner("Running smart analysis (Selected Model → AI)..."):
             try:
                 file_bytes = uploaded_file.read()
                 
-                # Step 1: Run selected Document Intelligence model (layout or read)
+                # Step 1: Run selected Document Intelligence model
                 st.write(f"**Step 1:** Running Document Intelligence model `{selected_model}` to extract text and layout...")
                 ocr_result = call_document_intelligence_ocr(file_bytes, content_type=uploaded_file.type or "application/octet-stream", model_id=selected_model)
                 
@@ -628,22 +952,20 @@ if run_button:
                 
                 # Extract layout tables
                 layout_tables = extract_layout_tables(ocr_result)
-                st.success(f"✓ Found {len(layout_tables)} tables using layout model")
+                st.success(f"✓ Found {len(layout_tables)} tables using {selected_model} model")
                 
                 # Show a preview of extracted text
                 with st.expander("Preview extracted text (first 1000 characters)"):
                     st.text(extracted_text[:1000] + "..." if len(extracted_text) > 1000 else extracted_text)
                 
-                # Step 3: Categorize tables with AI
+                # Step 3: Use AI to process the extracted data
+                st.write("**Step 2:** Using AI to categorize extracted tables and generate structured data...")
+                
                 if layout_tables:
-                    st.write("**Step 2:** Using AI to categorize extracted tables...")
+                    # Categorize tables with AI
                     categorized_tables = categorize_tables_with_ai(layout_tables)
                     
-                    # Check if we got meaningful chemical or material tables
-                    has_chemical_tables = categorized_tables and len(categorized_tables.get('chemical', [])) > 0
-                    has_material_tables = categorized_tables and len(categorized_tables.get('material', [])) > 0
-                    
-                    if has_chemical_tables or has_material_tables:
+                    if categorized_tables and (categorized_tables.get('chemical') or categorized_tables.get('material')):
                         st.success(f"✓ Successfully categorized tables: {len(categorized_tables.get('chemical', []))} chemical, {len(categorized_tables.get('material', []))} material")
                         
                         # Display Chemical Composition tables
@@ -726,68 +1048,70 @@ if run_button:
                                         if display_data:
                                             st.table(display_data)
                         
+                        # Generate JSON from extracted data
+                        st.write("**Step 3:** Generating JSON file from extracted data...")
+                        all_tables = chemical_tables + material_tables + other_tables
+                        extracted_data = extract_values_from_tables_and_text(all_tables, extracted_text)
+                        generated_json = generate_json_from_template(extracted_data, uploaded_file.name)
+                        st.success("✓ Generated JSON file using sample.json template")
+                        
+                        # Show preview of generated JSON
+                        with st.expander("Preview Generated JSON"):
+                            st.json(generated_json)
+                        
                         # Provide downloads
                         base_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file is not None and getattr(uploaded_file, 'name', None) else 'document'
                         
-                        col1, col2, col3 = st.columns(3)
+                        col1, col2, col3, col4 = st.columns(4)
                         with col1:
+                            json_fname = f"{base_name}.mtr.json"
+                            st.download_button(
+                                "📋 Download MTR JSON", 
+                                data=json.dumps(generated_json, indent=2), 
+                                file_name=json_fname, 
+                                mime="application/json"
+                            )
+                        
+                        with col2:
                             tables_fname = f"{base_name}.categorized_tables.json"
                             st.download_button(
-                                "Download Categorized Tables", 
+                                "📊 Download Categorized Tables", 
                                 data=json.dumps(categorized_tables, indent=2), 
                                 file_name=tables_fname, 
                                 mime="application/json"
                             )
                         
-                        with col2:
+                        with col3:
                             raw_tables_fname = f"{base_name}.raw_tables.json"
                             st.download_button(
-                                "Download Raw Tables", 
+                                "🔍 Download Raw Tables", 
                                 data=json.dumps(layout_tables, indent=2), 
                                 file_name=raw_tables_fname, 
                                 mime="application/json"
                             )
                         
-                        with col3:
+                        with col4:
                             text_fname = f"{base_name}.extracted_text.txt"
                             st.download_button(
-                                "Download Extracted Text", 
+                                "📄 Download Extracted Text", 
                                 data=extracted_text, 
                                 file_name=text_fname, 
                                 mime="text/plain"
                             )
-                    
                     else:
-                        st.warning("Layout model detected tables but none contain chemical composition or material properties data.")
-                        st.write("**Step 3:** Falling back to OCR + AI table generation from text...")
-                        # Fallback to AI-generated tables from text
+                        # Generate AI tables from text if categorization fails
                         ai_generated_tables = generate_tables_with_ai(extracted_text)
                         if ai_generated_tables and (ai_generated_tables.get('chemical') or ai_generated_tables.get('material')):
                             display_ai_generated_tables(ai_generated_tables, uploaded_file, extracted_text)
                         else:
-                            st.warning("AI could not generate meaningful tables from text.")
-                            # Final fallback to property extraction
-                            properties = extract_properties_with_ai(extracted_text)
-                            if properties:
-                                display_properties_fallback(properties, uploaded_file, extracted_text)
-                            else:
-                                st.warning("No properties could be extracted from the document text.")
-                
+                            st.warning("AI could not process the extracted data into meaningful tables.")
                 else:
-                    st.warning("No tables found in layout model.")
-                    st.write("**Step 3:** Falling back to OCR + AI table generation from text...")
-                    # Fallback to AI-generated tables from text
+                    # No tables found, generate AI tables from text
                     ai_generated_tables = generate_tables_with_ai(extracted_text)
                     if ai_generated_tables and (ai_generated_tables.get('chemical') or ai_generated_tables.get('material')):
                         display_ai_generated_tables(ai_generated_tables, uploaded_file, extracted_text)
                     else:
-                        st.warning("AI could not generate meaningful tables from text.")
-                        # Final fallback to property extraction
-                        properties = extract_properties_with_ai(extracted_text)
-                        if properties:
-                            display_properties_fallback(properties, uploaded_file, extracted_text)
-                        else:
-                            st.warning("No properties could be extracted from the document text.")
+                        st.warning("No tables found and AI could not generate meaningful tables from text.")
 
             except Exception as e:
                 msg = str(e)
@@ -801,17 +1125,7 @@ if run_button:
 
 # If no run yet, show instructions
 if not run_button:
-    st.info("Upload a document and press Run to extract text and tables. The app will:\n1. First try Layout model to detect structured tables\n2. If no relevant tables found, fall back to OCR + AI table generation\n3. Finally fall back to property extraction if needed")
+    # Removed instruction block and sample JSON expander per user request
+    st.info("Upload a document and press Run to extract text and tables. The app will run the selected model and generate JSON using the sample.json template.")
     st.markdown("---")
-    # st.subheader("Required Environment Variables")
-    # st.markdown("""
-    # Add these to your `.env` file:
-    
-    # **Document Intelligence (required):**
-    # - `AZURE_DI_ENDPOINT` - Your Document Intelligence endpoint
-    # - `AZURE_DI_KEY` - Your Document Intelligence key
-    
-    # **AI Service (required for property extraction):**
-    # - For Azure OpenAI: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT`
-    # - For OpenAI: `OPENAI_API_KEY`
-    # """)
+    st.info("Demo mode available if Azure credentials are missing.")
