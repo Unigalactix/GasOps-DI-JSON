@@ -18,7 +18,16 @@ API_VERSION = os.getenv("AZURE_DI_API_VERSION", "2023-07-31")
 
 st.set_page_config(page_title="OCR → Material Properties Extractor", layout="wide")
 
-st.title("Layout + OCR → Material & Chemical Properties Extractor")
+st.title("Smart Document Analyzer → Material & Chemical Properties Extractor")
+
+# Model selection UI: let the user choose which Document Intelligence model to use
+model_options = []
+# start with env/default model
+model_options.append(MODEL_ID)
+for opt in ("prebuilt-layout", "prebuilt-read"):
+    if opt not in model_options:
+        model_options.append(opt)
+selected_model = st.sidebar.selectbox("Select Document Intelligence model", options=model_options, index=0, help="Choose which model to use for extraction. 'prebuilt-layout' extracts tables and layout; 'prebuilt-read' focuses on OCR text.")
 
 if not ENDPOINT or not API_KEY:
     st.error("Missing credentials: please add AZURE_DI_ENDPOINT and AZURE_DI_KEY (or AZURE_FORM_RECOGNIZER_ENDPOINT / AZURE_FORM_RECOGNIZER_KEY) to your .env file.")
@@ -43,12 +52,14 @@ def _has_azure_openai():
 def _has_openai_key():
     return bool(os.getenv("OPENAI_API_KEY"))
 
-def call_document_intelligence_ocr(file_bytes: bytes, content_type: str = "application/octet-stream"):
+def call_document_intelligence_ocr(file_bytes: bytes, content_type: str = "application/octet-stream", model_id: str = None):
     """Call Document Intelligence read/OCR model to extract text from document."""
     if not ENDPOINT or not API_KEY:
         raise RuntimeError("Missing endpoint or API key")
 
-    analyze_url = f"{ENDPOINT.rstrip('/')}/formrecognizer/documentModels/{MODEL_ID}:analyze?api-version={API_VERSION}"
+    # Allow caller to override the model (UI selection). Fall back to default MODEL_ID.
+    model_to_use = model_id or MODEL_ID
+    analyze_url = f"{ENDPOINT.rstrip('/')}/formrecognizer/documentModels/{model_to_use}:analyze?api-version={API_VERSION}"
     headers = {
         "Ocp-Apim-Subscription-Key": API_KEY,
         "Content-Type": content_type
@@ -352,6 +363,154 @@ def extract_properties_with_ai(text: str, timeout: int = 30) -> Optional[list]:
         st.sidebar.error(f"AI properties extraction failed: {e}")
         return None
 
+def generate_tables_with_ai(text: str, timeout: int = 30) -> Optional[dict]:
+    """Ask an LLM to generate tables from OCR text when layout model doesn't detect suitable tables.
+    Returns a dict with 'chemical' and 'material' keys containing generated table objects.
+    """
+    system_msg = (
+        "You are a materials science assistant that creates structured tables from document text.\n"
+        "Given the OCR TEXT, analyze it and create well-organized tables for:\n"
+        "- 'chemical': Chemical composition data, elemental analysis, chemical properties\n"
+        "- 'material': Mechanical properties, physical properties, test results\n"
+        "Return a JSON object with keys 'chemical', 'material', each containing arrays of table objects.\n"
+        "Each table object should have: table_name, headers (array), rows (array of arrays).\n"
+        "Only create tables if you find relevant data. Don't create empty or speculative tables.\n"
+        "Output must be valid JSON only (no surrounding explanation)."
+    )
+
+    user_msg = f"OCR TEXT:\n{text[:50000]}\n\nGenerate structured tables from this text as described."
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": 0,
+        "max_tokens": 3000,
+    }
+
+    try:
+        if _has_azure_openai():
+            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT").rstrip('/')
+            deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+            api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2023-10-01")
+            url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+            key = os.getenv("AZURE_OPENAI_KEY") or os.getenv("AZURE_OPENAI_API_KEY")
+            headers = {"api-key": key, "Content-Type": "application/json"}
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"AI call failed: {resp.status_code} {resp.text}")
+            body = resp.json()
+            content = body.get("choices", [])[0].get("message", {}).get("content")
+        elif _has_openai_key():
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}", "Content-Type": "application/json"}
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            if resp.status_code not in (200, 201):
+                raise RuntimeError(f"AI call failed: {resp.status_code} {resp.text}")
+            body = resp.json()
+            content = body.get("choices", [])[0].get("message", {}).get("content")
+        else:
+            return None
+
+        if not content:
+            return None
+
+        # Try to find JSON object in the response
+        parsed = find_json_in_text(content)
+        if not parsed:
+            try:
+                parsed = json.loads(content)
+            except:
+                return None
+        
+        return parsed
+    except Exception as e:
+        st.sidebar.error(f"AI table generation failed: {e}")
+        return None
+
+def display_ai_generated_tables(ai_tables: dict, uploaded_file, extracted_text: str):
+    """Display AI-generated tables."""
+    st.success("✓ Generated tables using AI from OCR text")
+    
+    # Display Chemical Composition tables
+    chemical_tables = ai_tables.get('chemical', [])
+    if chemical_tables:
+        st.subheader("Chemical Composition Tables (AI Generated)")
+        for idx, table in enumerate(chemical_tables):
+            table_name = table.get('table_name', f"Generated Chemical Table {idx+1}")
+            st.markdown(f"**{table_name}**")
+            headers = table.get('headers', [])
+            rows = table.get('rows', [])
+            
+            if headers and rows:
+                # Create display data
+                display_data = []
+                for row in rows:
+                    if row:  # Skip empty rows
+                        row_dict = {}
+                        for i, header in enumerate(headers):
+                            value = row[i] if i < len(row) else ""
+                            row_dict[str(header)] = str(value)
+                        display_data.append(row_dict)
+                
+                if display_data:
+                    st.table(display_data)
+                else:
+                    st.info("Table generated but no data to display")
+            else:
+                st.info("Table structure could not be generated properly")
+    
+    # Display Material Properties tables
+    material_tables = ai_tables.get('material', [])
+    if material_tables:
+        st.subheader("Material Properties Tables (AI Generated)")
+        for idx, table in enumerate(material_tables):
+            table_name = table.get('table_name', f"Generated Material Table {idx+1}")
+            st.markdown(f"**{table_name}**")
+            headers = table.get('headers', [])
+            rows = table.get('rows', [])
+            
+            if headers and rows:
+                # Create display data
+                display_data = []
+                for row in rows:
+                    if row:  # Skip empty rows
+                        row_dict = {}
+                        for i, header in enumerate(headers):
+                            value = row[i] if i < len(row) else ""
+                            row_dict[str(header)] = str(value)
+                        display_data.append(row_dict)
+                
+                if display_data:
+                    st.table(display_data)
+                else:
+                    st.info("Table generated but no data to display")
+            else:
+                st.info("Table structure could not be generated properly")
+    
+    # Provide downloads
+    base_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file is not None and getattr(uploaded_file, 'name', None) else 'document'
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        tables_fname = f"{base_name}.ai_generated_tables.json"
+        st.download_button(
+            "Download AI Generated Tables", 
+            data=json.dumps(ai_tables, indent=2), 
+            file_name=tables_fname, 
+            mime="application/json"
+        )
+    
+    with col2:
+        text_fname = f"{base_name}.extracted_text.txt"
+        st.download_button(
+            "Download Extracted Text", 
+            data=extracted_text, 
+            file_name=text_fname, 
+            mime="text/plain"
+        )
+
 def display_properties_fallback(properties: list, uploaded_file, extracted_text: str):
     """Display properties in the original format as fallback."""
     if not properties:
@@ -430,8 +589,8 @@ def display_properties_fallback(properties: list, uploaded_file, extracted_text:
         )
 
 # Streamlit layout
-st.sidebar.header("OCR Settings")
-st.sidebar.write("Model: %s" % MODEL_ID)
+st.sidebar.header("Smart Analysis Settings")
+st.sidebar.write("Model: %s" % selected_model)
 
 # Show AI configuration status
 if _has_azure_openai():
@@ -442,7 +601,7 @@ else:
     st.sidebar.warning("⚠ No AI credentials found - add AZURE_OPENAI_* or OPENAI_API_KEY to .env")
 
 uploaded_file = st.file_uploader("Upload document (PDF / JPG / PNG)", type=["pdf", "jpg", "jpeg", "png"], accept_multiple_files=False)
-run_button = st.button("Run Layout + OCR + AI extraction")
+run_button = st.button("Run Smart Analysis (Layout → OCR → AI)")
 
 if uploaded_file is not None:
     st.sidebar.write(f"Uploaded: {uploaded_file.name} ({uploaded_file.type})")
@@ -451,13 +610,13 @@ if run_button:
     if uploaded_file is None:
         st.warning("Please upload a file before running.")
     else:
-        with st.spinner("Running Layout + OCR and extracting properties..."):
+        with st.spinner("Running smart analysis (Layout → OCR → AI)..."):
             try:
                 file_bytes = uploaded_file.read()
                 
-                # Step 1: Layout + OCR with Document Intelligence
-                st.write("**Step 1:** Running Layout + OCR with Document Intelligence...")
-                ocr_result = call_document_intelligence_ocr(file_bytes, content_type=uploaded_file.type or "application/octet-stream")
+                # Step 1: Run selected Document Intelligence model (layout or read)
+                st.write(f"**Step 1:** Running Document Intelligence model `{selected_model}` to extract text and layout...")
+                ocr_result = call_document_intelligence_ocr(file_bytes, content_type=uploaded_file.type or "application/octet-stream", model_id=selected_model)
                 
                 # Step 2: Extract text and tables from result
                 extracted_text = extract_text_from_ocr_result(ocr_result)
@@ -480,7 +639,13 @@ if run_button:
                     st.write("**Step 2:** Using AI to categorize extracted tables...")
                     categorized_tables = categorize_tables_with_ai(layout_tables)
                     
-                    if categorized_tables:
+                    # Check if we got meaningful chemical or material tables
+                    has_chemical_tables = categorized_tables and len(categorized_tables.get('chemical', [])) > 0
+                    has_material_tables = categorized_tables and len(categorized_tables.get('material', [])) > 0
+                    
+                    if has_chemical_tables or has_material_tables:
+                        st.success(f"✓ Successfully categorized tables: {len(categorized_tables.get('chemical', []))} chemical, {len(categorized_tables.get('material', []))} material")
+                        
                         # Display Chemical Composition tables
                         chemical_tables = categorized_tables.get('chemical', [])
                         if chemical_tables:
@@ -560,7 +725,7 @@ if run_button:
                                         
                                         if display_data:
                                             st.table(display_data)
-                                
+                        
                         # Provide downloads
                         base_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file is not None and getattr(uploaded_file, 'name', None) else 'document'
                         
@@ -593,22 +758,36 @@ if run_button:
                             )
                     
                     else:
-                        st.warning("AI could not categorize the tables. Falling back to property extraction from text...")
-                        # Fallback to original property extraction
+                        st.warning("Layout model detected tables but none contain chemical composition or material properties data.")
+                        st.write("**Step 3:** Falling back to OCR + AI table generation from text...")
+                        # Fallback to AI-generated tables from text
+                        ai_generated_tables = generate_tables_with_ai(extracted_text)
+                        if ai_generated_tables and (ai_generated_tables.get('chemical') or ai_generated_tables.get('material')):
+                            display_ai_generated_tables(ai_generated_tables, uploaded_file, extracted_text)
+                        else:
+                            st.warning("AI could not generate meaningful tables from text.")
+                            # Final fallback to property extraction
+                            properties = extract_properties_with_ai(extracted_text)
+                            if properties:
+                                display_properties_fallback(properties, uploaded_file, extracted_text)
+                            else:
+                                st.warning("No properties could be extracted from the document text.")
+                
+                else:
+                    st.warning("No tables found in layout model.")
+                    st.write("**Step 3:** Falling back to OCR + AI table generation from text...")
+                    # Fallback to AI-generated tables from text
+                    ai_generated_tables = generate_tables_with_ai(extracted_text)
+                    if ai_generated_tables and (ai_generated_tables.get('chemical') or ai_generated_tables.get('material')):
+                        display_ai_generated_tables(ai_generated_tables, uploaded_file, extracted_text)
+                    else:
+                        st.warning("AI could not generate meaningful tables from text.")
+                        # Final fallback to property extraction
                         properties = extract_properties_with_ai(extracted_text)
                         if properties:
                             display_properties_fallback(properties, uploaded_file, extracted_text)
                         else:
                             st.warning("No properties could be extracted from the document text.")
-                
-                else:
-                    st.warning("No tables found in layout. Extracting properties from text...")
-                    # Fallback to original property extraction
-                    properties = extract_properties_with_ai(extracted_text)
-                    if properties:
-                        display_properties_fallback(properties, uploaded_file, extracted_text)
-                    else:
-                        st.warning("No properties could be extracted from the document text.")
 
             except Exception as e:
                 msg = str(e)
@@ -622,7 +801,7 @@ if run_button:
 
 # If no run yet, show instructions
 if not run_button:
-    st.info("Upload a document and press Run to extract text and tables using Document Intelligence Layout + OCR, then use AI to categorize tables into chemical composition and material properties.")
+    st.info("Upload a document and press Run to extract text and tables. The app will:\n1. First try Layout model to detect structured tables\n2. If no relevant tables found, fall back to OCR + AI table generation\n3. Finally fall back to property extraction if needed")
     st.markdown("---")
     # st.subheader("Required Environment Variables")
     # st.markdown("""
