@@ -37,6 +37,7 @@
       "AnnexN": "No",
       "AnnexO": "Yes",
       "TestPipe": "",
+ 
       "HNPipeTensileTestResults": {
         "YieldStrength": "73400",
         "YieldStrengthUnit": "psi",
@@ -58,6 +59,7 @@
         "FlatteningTest": "N/A",
         "GuidedBendTest": "P"
       },
+ 
       "HNPipeCVNResults": {
         "CVNAbsorbedEnergyAverage": "232",
         "CVNAbsorbedEnergy1": "271",
@@ -69,6 +71,7 @@
         "CVNDuctilityShear1Percentage": "100",
         "CVNDuctilityShear2Percentage": "100",
         "CVNDuctilityShear3Percentage": "100",
+        "CVNShearAccCriteria": "85% Min ave / 75% Min Ind",
         "CVNSpecimenSize": "0.4 x 0.4",
         "CVNSpecimenSizeUnits": "inches",
         "CVNSpecimenLocation": "Body",
@@ -76,6 +79,7 @@
         "CVNTestTemperature": "-4",
         "CVNTestTemperatureUnit": "F"
       },
+ 
       "HNPipeDWTResults": {
         "DWTTTemperature": "32",
         "DWTTTemperatureUnit": "F",
@@ -86,17 +90,20 @@
         "DWTTDuctilityShear3Percentage": "100",
         "DWTTSpecimenSize": "Full"
       },
+ 
       "HNPipeHardnessResults": {
         "HardnessSpecification": "ASTM E92",
         "MaximumHardness": "220",
         "HardnessUnit": "HV10"
       },
+ 
       "HNPipeHydroTestResults": {
         "CertifiedMinHydroTestPressure": "3174",
         "CertifiedHydroTestPressureUnit": "psig",
         "SpecifiedMinimumHydroStaticTestDuration": "10",
         "SpecifiedHydrostaticTestDurationUnit": "s"
       },
+ 
       "HNPipeWeldNDTInspResults": {
         "WeldNDTMethod": "",
         "WeldNDTTypeofReferenceIndicator": "",
@@ -106,10 +113,12 @@
         "SMLSNDTSizeofReferenceIndicator": "",
         "NDTStatementMethodTypeSize": "Seam weld UT: N5 notch / 1.6mm hole Pipe ends peripheral MUT to API 5L E.3.2.3 (ASTM A578): 6.4mm FBH RT: W10-W16 & Wire#10"
       },
+ 
       "HNPipeHFWResults": {
         "MinimumTemperatureforHTandWS": "N/A",
         "MinimumTemperatureUnitsforHTandWS": ""
       },
+ 
       "HNPipeHeatChemicalResults": {
         "HeatC": "0.09",
         "HeatMn": "1.58",
@@ -132,6 +141,7 @@
         "HeatCEIIW": "",
         "HeatCEIIWCriteria": ""
       },
+ 
       "HNPipeChemicalCompResults": {
         "Product1C": "0.09",
         "Product1Mn": "1.58",
@@ -167,6 +177,7 @@
         "Product2N": "0.005",
         "Product2Ca": "0.008"
       },
+ 
       "HNPipeChemicalEquivResults": {
         "Product1CEPcm": "0.18",
         "ProductCEPcmCriteria": "0.25 max",
@@ -178,3 +189,4 @@
     }
   ]
 }
+ 
