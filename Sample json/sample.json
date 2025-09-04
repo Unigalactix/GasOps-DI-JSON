@@ -1,123 +1,25 @@
 {
   "CompanyMTRFileID": 11,
   "HeatNumber": "123456",
-  "ZNumber": "912345678",
   "CertificationDate": "09/01/2020",
-  "OtherCustomerRequirements": "Both pipe ends checked and recorded  for ID, OoR and WT Pipe number stamped on bevel",
   "MatlFacilityDetails": {
     "PipeManufacturerName": "Liberty Pipes (Hartlepool) Ltd.",
-    "PipeManufacturerLocation": "Brends Road, Hartlepool, TS252EF United Kingdom",
-    "PlateCoilRollingManufacturerName": "AG der Dillinger Hüttenwerke",
-    "PlateCoilRollingManufacturerLocation": "Werkstrabe 1 66763 Dillingen/Saar, Germany",
-    "SteelmakingManufacturerName": "AG der Dillinger Hüttenwerke",
-    "SteelmakingManufacturerLocation": "Werkstrabe 166763 Dillingen/Saar, Germany",
-    "MillAPILicenseNumber": "5137"
+    "PipeManufacturerLocation": "Brends Road, Hartlepool, TS252EF United Kingdom"
   },
+
   "HNPipeDetails": [
     {
       "PipeNumber": "DZS0003",
-      "API5LSpecificationEdition": "46th",
-      "NominalOD": "30",
-      "NominalODUnit": "in",
-      "NominalWallThickness": "0.75",
-      "NominalWallThicknessUnit": "in",
-      "PipeSpecGradePSLType": "",
-      "Specification": "API Spec 5L",
-      "ProductServiceLevel": "PSL2",
-      "Grade": "X70M",
-      "Type": "SAWL",
-      "ApplicableAnnexes": "",
-      "DeliveryCondition": "M",
-      "AnnexF": "No",
-      "AnnexG": "Yes",
-      "AnnexH": "No",
-      "AnnexI": "No",
-      "AnnexJ": "No",
-      "AnnexK": "No",
-      "AnnexN": "No",
-      "AnnexO": "Yes",
-      "TestPipe": "",
- 
       "HNPipeTensileTestResults": {
         "YieldStrength": "73400",
         "YieldStrengthUnit": "psi",
-        "YieldStrengthMeasurementLocation": "0.2% Offset",
         "UltimateTensileStrength": "90000",
         "UltimateTensileStrengthUnit": "psi",
-        "BodyTensileSpecimenSize": "Full",
-        "BodyTensileSpecimenType": "Strap",
-        "BodyTensileSpecimenOrientation": "Transverse",
-        "BodyTensileSpecimenGaugeLength": "2.00",
-        "BodyTensileSpecimenGaugeLengthUnit": "in",
-        "ElongationPercentage": "36",
         "YTRatio": "0.82",
         "SeamWeldTensileStrength": "91000",
-        "SeamWeldTensileStrengthUnits": "psi",
-        "SeamWeldTensileSpecimenSize": "Full",
-        "SeamWeldTensileSpecimenType": "Strap",
-        "BendTest": "N/A",
-        "FlatteningTest": "N/A",
-        "GuidedBendTest": "P"
+        "SeamWeldTensileStrengthUnits": "psi"
       },
- 
-      "HNPipeCVNResults": {
-        "CVNAbsorbedEnergyAverage": "232",
-        "CVNAbsorbedEnergy1": "271",
-        "CVNAbsorbedEnergy2": "205",
-        "CVNAbsorbedEnergy3": "220",
-        "CVNAbsorbedEnergyUnit": "ft-lbf",
-        "CVNEnergyAccCriteria": "30 ft-lbf Min Ave / 21 ft-lbf Min Ind",
-        "CVNDuctilityShearAveragePercentage": "100",
-        "CVNDuctilityShear1Percentage": "100",
-        "CVNDuctilityShear2Percentage": "100",
-        "CVNDuctilityShear3Percentage": "100",
-        "CVNShearAccCriteria": "85% Min ave / 75% Min Ind",
-        "CVNSpecimenSize": "0.4 x 0.4",
-        "CVNSpecimenSizeUnits": "inches",
-        "CVNSpecimenLocation": "Body",
-        "CVNSpecimenOrientation": "Transverse",
-        "CVNTestTemperature": "-4",
-        "CVNTestTemperatureUnit": "F"
-      },
- 
-      "HNPipeDWTResults": {
-        "DWTTTemperature": "32",
-        "DWTTTemperatureUnit": "F",
-        "DWTTNotchType": "Pressed Notch (PN)",
-        "DWTTDuctilityShearAveragePercentage": "100",
-        "DWTTDuctilityShear1Percentage": "100",
-        "DWTTDuctilityShear2Percentage": "100",
-        "DWTTDuctilityShear3Percentage": "100",
-        "DWTTSpecimenSize": "Full"
-      },
- 
-      "HNPipeHardnessResults": {
-        "HardnessSpecification": "ASTM E92",
-        "MaximumHardness": "220",
-        "HardnessUnit": "HV10"
-      },
- 
-      "HNPipeHydroTestResults": {
-        "CertifiedMinHydroTestPressure": "3174",
-        "CertifiedHydroTestPressureUnit": "psig",
-        "SpecifiedMinimumHydroStaticTestDuration": "10",
-        "SpecifiedHydrostaticTestDurationUnit": "s"
-      },
- 
-      "HNPipeWeldNDTInspResults": {
-        "WeldNDTMethod": "",
-        "WeldNDTTypeofReferenceIndicator": "",
-        "WeldNDTSizeofReferenceIndicator": "",
-        "SMLSNDTMethod": "",
-        "SMLSNDTTypeofReferenceIndicator": "",
-        "SMLSNDTSizeofReferenceIndicator": "",
-        "NDTStatementMethodTypeSize": "Seam weld UT: N5 notch / 1.6mm hole Pipe ends peripheral MUT to API 5L E.3.2.3 (ASTM A578): 6.4mm FBH RT: W10-W16 & Wire#10"
-      },
- 
-      "HNPipeHFWResults": {
-        "MinimumTemperatureforHTandWS": "N/A",
-        "MinimumTemperatureUnitsforHTandWS": ""
-      },
+
  
       "HNPipeHeatChemicalResults": {
         "HeatC": "0.09",
@@ -189,4 +91,3 @@
     }
   ]
 }
- 
