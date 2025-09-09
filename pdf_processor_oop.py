@@ -26,7 +26,7 @@ load_dotenv()
 class DocumentIntelligenceOCR:
     """Handles OCR text extraction using Azure Document Intelligence."""
     
-    def __init__(self, endpoint: str, api_key: str, model_id: str = "prebuilt-read", api_version: str = "2023-07-31"):
+    def __init__(self, endpoint: str, api_key: str, model_id: str = "prebuilt-document", api_version: str = "2023-07-31"):
         """Initialize OCR processor with Azure credentials."""
         self.endpoint = endpoint.rstrip('/')
         self.api_key = api_key
@@ -395,7 +395,7 @@ class PDFProcessor:
         self.ocr_processor = DocumentIntelligenceOCR(
             endpoint=self.config["azure_di_endpoint"],
             api_key=self.config["azure_di_key"],
-            model_id=self.config.get("azure_di_model_id", "prebuilt-read"),
+            model_id=self.config.get("azure_di_model_id", "prebuilt-document"),
             api_version=self.config.get("azure_di_api_version", "2023-07-31")
         )
         
@@ -416,7 +416,7 @@ class PDFProcessor:
             os.getenv("AZURE_DI_KEY") or 
             os.getenv("AZURE_FORM_RECOGNIZER_KEY")
         )
-        config["azure_di_model_id"] = os.getenv("AZURE_DI_MODEL_ID", "prebuilt-read")
+        config["azure_di_model_id"] = os.getenv("AZURE_DI_MODEL_ID", "prebuilt-document")
         config["azure_di_api_version"] = os.getenv("AZURE_DI_API_VERSION", "2023-07-31")
         
         # Validate required configuration
@@ -620,7 +620,7 @@ def main():
                     print(f"\nGenerated {len(results)} JSON files")
                 except Exception as e:
                     print(f"\nError during batch processing: {e}")
-            
+
             elif choice == "3":
                 print("\nGoodbye! 👋")
                 break
