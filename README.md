@@ -63,6 +63,8 @@ An interactive, easy-to-use application that converts PDF materials testing repo
 
 ## Versions and environment (what was used to build & test)
 - Python: 3.11 (the devcontainer uses Python 3.11 / Debian Bullseye image).
+- Local Python (this machine): 3.13.7
+ - Recommended Python compatibility: >=3.11, <=3.13
 - Key packages (see `requirements.txt`):
   - python-dotenv — load `.env` files
   - requests — HTTP calls to Azure and OpenAI
@@ -89,6 +91,25 @@ If you don't have these keys, contact the person or team that manages your Azure
 Open a terminal (Windows PowerShell) and run:
 ```powershell
 pip install -r requirements.txt
+```
+
+If you'd like to keep dependencies isolated, create and use a virtual environment (recommended). On Windows PowerShell:
+
+```powershell
+# create a venv in the project folder
+python -m venv .venv
+
+# activate the venv
+.\.venv\Scripts\Activate.ps1
+
+# then install dependencies inside the venv
+pip install -r requirements.txt
+```
+
+To deactivate the virtual environment, run:
+
+```powershell
+deactivate
 ```
 
 ### 3) Run the processor (interactive)
@@ -152,7 +173,7 @@ If you can't resolve an issue, copy the program output and share it with a techn
 - The repo contains two main entry points: `pdf_processor.py` (original) and `pdf_processor_oop.py` (refactored). The latter splits responsibilities into `DocumentIntelligenceOCR`, `AITemplateProcessor`, and `PDFProcessor` classes for easier testing and extension.
 - Use `pytest` to run basic tests in `TESTS/`.
 
-## Next steps / Improvements you can ask for
+## Next steps / Improvements 
 - Add URL-download support so you can paste HTTP links to PDFs.
 - Add a simple GUI or drag-and-drop front-end.
 - Add automatic validation rules for chemical and mechanical fields.
@@ -160,4 +181,3 @@ If you can't resolve an issue, copy the program output and share it with a techn
 
 ---
 
-If you'd like, I can now update the README to include screenshots or a short video note showing an example run; or I can add the one-click URL-download helper so you can paste links instead of local paths.
