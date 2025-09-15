@@ -2,3 +2,5 @@ python-dotenv
 requests
 pytest
 openai
+requests-pkcs12
+openpyxl

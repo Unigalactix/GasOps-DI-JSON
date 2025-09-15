@@ -2,12 +2,23 @@
 """
 Object-Oriented PDF Document Intelligence Processor
 Converts PDF files to JSON using Azure Document Intelligence and AI processing.
+Enhanced with standalone MTR CLI functionality for API-based processing.
+
 Usage: python pdf_processor_oop.py
 
 Architecture:
 - PDFProcessor: Main orchestrator class
 - DocumentIntelligenceOCR: OCR extraction class  
 - AITemplateProcessor: AI processing class for JSON generation
+- APIProcessor: Enhanced API-based PDF retrieval with embedded functionality
+- XLSXProcessor: Excel file management with color-coded data merging
+
+Features:
+- Local PDF file processing
+- API-based PDF retrieval by HeatNumber
+- Embedded authentication and certificate handling
+- Automatic JSON to XLSX conversion with color logic
+- Enhanced error handling and logging
 """
 
 import os
@@ -16,11 +27,122 @@ import json
 import re
 import time
 import requests
+import base64
+import tempfile
+import io
 from dotenv import load_dotenv
 from typing import Optional, Dict, Any
 from datetime import datetime
+from pathlib import Path
 
 load_dotenv()
+
+try:
+    from openpyxl import load_workbook, Workbook
+    from openpyxl.styles import PatternFill
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+
+# Import certificate API client
+try:
+    from scripts.cert_api_client import api_client
+    CERT_API_AVAILABLE = True
+except ImportError:
+    CERT_API_AVAILABLE = False
+
+# Add requests_pkcs12 for enhanced API calling
+try:
+    import requests_pkcs12
+    REQUESTS_PKCS12_AVAILABLE = True
+except ImportError:
+    REQUESTS_PKCS12_AVAILABLE = False
+
+# Add Azure Document Intelligence imports
+try:
+    from azure.core.credentials import AzureKeyCredential
+    from azure.ai.documentintelligence import DocumentIntelligenceClient
+    from azure.ai.documentintelligence.models import AnalyzeResult
+    AZURE_DI_AVAILABLE = True
+except ImportError:
+    AZURE_DI_AVAILABLE = False
+
+# Embedded API calling functionality
+def call_weld_api(api_name, parameters, auth_token, pfx_source="./certificate/oamsapicert2023.pfx"):
+    """Embedded API client for external welding management system endpoints."""
+
+    api_endpoints = {
+        "GetMTRFileDatabyHeatNumber": "/api/AIMTRMetaData/GetMTRFileDatabyHeatNumber",
+    }
+
+    endpoint = api_endpoints.get(api_name)
+    if not endpoint:
+        return {"error": f"Unknown API: {api_name}"}
+
+    url = f"https://oamsapi.gasopsiq.com{endpoint}"
+    payload = parameters
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "auth-token": auth_token
+    }
+
+    temp_file = None
+    try:
+        # If the input is a base64 string (not a file path), decode and save as temp file
+        if not os.path.isfile(pfx_source):
+            try:
+                cert_bytes = base64.b64decode(pfx_source)
+            except Exception as decode_err:
+                return {"error": f"Failed to decode base64 certificate: {decode_err}"}
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pfx")
+            temp_file.write(cert_bytes)
+            temp_file.close()
+            pfx_path = temp_file.name
+        else:
+            pfx_path = pfx_source
+
+        with open(pfx_path, "rb") as f:
+            pfx_data = f.read()
+
+        # GET request for MTR API
+        response = requests_pkcs12.get(
+            url,
+            headers=headers,
+            params=payload,
+            pkcs12_data=pfx_data,
+            pkcs12_password="password1234"
+        )
+
+        try:
+            result = response.json()
+            return {"success": True, "data": result, "status_code": response.status_code}
+        except Exception:
+            return {"success": True, "data": response.text, "status_code": response.status_code}
+
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if temp_file:
+            try:
+                os.unlink(temp_file.name)
+            except Exception:
+                pass
+
+# Embedded MTR tools functionality
+def GetMTRFileDatabyHeatNumber(heat_number=None, company_mtr_file_id=None, auth_token=None):
+    """Embedded MTR data retrieval function."""
+    parameters = {
+        "heatNumber": heat_number,
+        "companyMTRFileID": company_mtr_file_id
+    }
+    # Clean parameters by removing None values
+    parameters = {k: v for k, v in parameters.items() if v is not None}
+    return call_weld_api("GetMTRFileDatabyHeatNumber", parameters, auth_token)
+
+# Default authentication token
+DEFAULT_AUTH_TOKEN = "OS8xNi8yMDI1IDg6NTU6NTQgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNS8yMDI1IDg6NTU6NTQgUE0mQ0VERU1P"
 
 
 class DocumentIntelligenceOCR:
@@ -412,6 +534,361 @@ class AITemplateProcessor:
             return None
 
 
+class APIProcessor:
+    """Handles API-based PDF retrieval and processing with enhanced functionality."""
+    
+    def __init__(self):
+        """Initialize API processor with certificate configuration."""
+        if not REQUESTS_PKCS12_AVAILABLE:
+            raise ImportError("requests_pkcs12 is required for API processing. Install with: pip install requests-pkcs12")
+        
+        # API configuration
+        self.api_base_url = "https://oamsapi.gasopsiq.com"
+        self.api_endpoint = "/api/AIMTRMetaData/GetMTRFileDatabyHeatNumber"
+        self.pfx_source = "./certificate/oamsapicert2023.pfx"
+        self.pfx_password = "password1234"
+        self.default_auth_token = DEFAULT_AUTH_TOKEN
+        
+        # Check if certificate exists
+        if not os.path.exists(self.pfx_source):
+            raise FileNotFoundError(f"Certificate file not found: {self.pfx_source}")
+    
+    def fetch_pdf_by_heat_number(self, heat_number: str, auth_token: str = None) -> bytes:
+        """
+        Fetch PDF data from API using HeatNumber with enhanced API calling.
+        Uses the embedded call_weld_api and GetMTRFileDatabyHeatNumber functions.
+        
+        Args:
+            heat_number: The heat number to search for
+            auth_token: Authentication token (uses default if None)
+            
+        Returns:
+            PDF file content as bytes
+        """
+        # Use default token if none provided
+        if not auth_token:
+            auth_token = self.default_auth_token
+        
+        print(f"Fetching MTR data for HeatNumber: {heat_number}")
+        
+        try:
+            # Use embedded API function
+            tool_result = GetMTRFileDatabyHeatNumber(
+                heat_number=heat_number,
+                company_mtr_file_id=None,
+                auth_token=auth_token
+            )
+            
+            if not tool_result.get("success"):
+                raise RuntimeError(f"API call failed: {tool_result.get('error', 'Unknown error')}")
+            
+            # Process MTR document response
+            if isinstance(tool_result.get("data"), dict):
+                data = tool_result["data"]
+                if "Obj" in data and data["Obj"]:
+                    first_obj = data["Obj"][0]
+                    binary_string = first_obj.get("BinaryString")
+                    
+                    if binary_string:
+                        # Convert binary string to PDF bytes
+                        try:
+                            pdf_data = base64.b64decode(binary_string)
+                            print(f"Successfully decoded binary string as base64 ({len(pdf_data)} bytes)")
+                            return pdf_data
+                        except Exception:
+                            # Try as raw data if base64 fails
+                            pdf_data = binary_string.encode('latin-1') if isinstance(binary_string, str) else binary_string
+                            print(f"Using binary string as raw data ({len(pdf_data)} bytes)")
+                            return pdf_data
+                    else:
+                        raise RuntimeError("No binary string found in API response")
+                else:
+                    raise RuntimeError("No MTR data found in API response")
+            else:
+                raise RuntimeError("Invalid API response format")
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to fetch PDF from API: {e}")
+    
+    def convert_binary_to_pdf(self, binary_string: str, heat_number: str, save_locally: bool = True) -> str:
+        """Convert binary string to PDF file with local storage option"""
+        try:
+            # Same logic as standalone script
+            try:
+                pdf_data = base64.b64decode(binary_string)
+                print(f"Successfully decoded binary string as base64 for heat number {heat_number}")
+            except Exception:
+                pdf_data = binary_string.encode('latin-1') if isinstance(binary_string, str) else binary_string
+                print(f"Using binary string as raw data for heat number {heat_number}")
+
+            if save_locally:
+                # Save to Sample json folder
+                sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
+                os.makedirs(sample_json_dir, exist_ok=True)
+                pdf_path = os.path.join(sample_json_dir, f"MTR_{heat_number}.pdf")
+            else:
+                # Temp directory
+                temp_dir = tempfile.gettempdir()
+                pdf_path = os.path.join(temp_dir, f"MTR_{heat_number}.pdf")
+
+            with open(pdf_path, 'wb') as pdf_file:
+                pdf_file.write(pdf_data)
+
+            print(f"PDF file created successfully: {pdf_path}")
+            return pdf_path
+
+        except Exception as e:
+            print(f"Failed to convert binary to PDF for heat number {heat_number}: {str(e)}")
+            raise Exception(f"PDF conversion failed: {str(e)}")
+    
+    def process_heat_number_to_json(self, heat_number: str, output_dir: Optional[str] = None, auth_token: str = None) -> tuple:
+        """
+        Fetch PDF by heat number, process it, and return paths.
+        
+        Args:
+            heat_number: The heat number to process
+            output_dir: Optional output directory for JSON file
+            auth_token: Authentication token (uses default if None)
+            
+        Returns:
+            Tuple of (temp_pdf_path, output_json_path)
+        """
+        # Fetch PDF data from API using enhanced method
+        pdf_content = self.fetch_pdf_by_heat_number(heat_number, auth_token)
+        
+        # Create temporary PDF file
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_pdf:
+            temp_pdf.write(pdf_content)
+            temp_pdf_path = temp_pdf.name
+        
+        # Set output path
+        if output_dir:
+            output_path = os.path.join(output_dir, f"MTR_{heat_number}.json")
+        else:
+            # Save to Sample json folder by default
+            sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
+            os.makedirs(sample_json_dir, exist_ok=True)
+            output_path = os.path.join(sample_json_dir, f"MTR_{heat_number}.json")
+        
+        return temp_pdf_path, output_path
+
+
+class XLSXProcessor:
+    """Handles XLSX file creation and data merging with color logic."""
+    
+    def __init__(self, xlsx_template_path: str):
+        """Initialize XLSX processor with template path."""
+        if not OPENPYXL_AVAILABLE:
+            raise ImportError("openpyxl is required for XLSX processing. Install with: pip install openpyxl")
+        
+        self.xlsx_template_path = Path(xlsx_template_path)
+        
+    def flatten_json(self, obj: Any, parent_key: str = "", sep: str = ".") -> Dict[str, str]:
+        """
+        Flatten a JSON-like object into a single-level dict with dot-separated keys.
+        Creates smart mapping for Excel template headers.
+        """
+        items = {}
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, (dict, list)):
+                    items.update(self.flatten_json(v, new_key, sep=sep))
+                else:
+                    # Add both hierarchical and direct key
+                    items[new_key] = str(v) if v is not None else ""
+                    # Also add just the field name for direct Excel header matching
+                    items[k] = str(v) if v is not None else ""
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                new_key = f"{parent_key}{sep}{i}" if parent_key else str(i)
+                if isinstance(v, (dict, list)):
+                    items.update(self.flatten_json(v, new_key, sep=sep))
+                else:
+                    items[new_key] = str(v) if v is not None else ""
+        else:
+            items[parent_key] = str(obj) if obj is not None else ""
+        return items
+    
+    def update_xlsx_from_json(self, json_path: str) -> str:
+        """
+        Update XLSX file with JSON data according to merging rules.
+        
+        Args:
+            json_path: Path to the JSON file to process
+            
+        Returns:
+            Path to the updated XLSX file
+        """
+        json_path = Path(json_path)
+        
+        # Load JSON data
+        with open(json_path, "r", encoding="utf-8") as f:
+            json_data = json.load(f)
+        
+        # Create XLSX path in same directory as JSON with NEW_.xlsx name
+        xlsx_path = json_path.parent / "NEW_.xlsx"
+        
+        # Check if XLSX file already exists
+        if xlsx_path.exists():
+            print(f"XLSX file already exists, updating: {xlsx_path}")
+            # Load existing workbook
+            wb = load_workbook(xlsx_path)
+            ws = wb.active
+            template_ws = None  # No template needed for existing file
+            
+        elif self.xlsx_template_path.exists():
+            print(f"Creating new XLSX file from template: {xlsx_path}")
+            # Create new workbook from template
+            template_wb = load_workbook(self.xlsx_template_path)
+            template_ws = template_wb.active
+            
+            wb = Workbook()
+            ws = wb.active
+            
+            # Copy first two rows from template with formatting
+            self._copy_header_rows(template_ws, ws)
+            
+        else:
+            raise FileNotFoundError(f"Template XLSX file not found: {self.xlsx_template_path}")
+        
+        # Clean up empty rows between headers and data before adding new data
+        self._remove_empty_rows_after_headers(ws)
+        
+        # Get headers from second row (field names, not group headers)
+        header_row = [cell.value for cell in ws[2]]
+        
+        # Flatten JSON data
+        flat_data = self.flatten_json(json_data)
+        row_to_process = [flat_data.get(str(h), "") for h in header_row]
+        
+        # Find HeatNumber column index
+        heat_col_idx = self._find_heat_number_column(header_row)
+        
+        # Search for existing row with matching HeatNumber
+        match_row = self._find_matching_row(ws, heat_col_idx, row_to_process)
+        
+        # Determine target row (overwrite existing or append new)
+        target_row = match_row if match_row else ws.max_row + 1
+        
+        # Update row with color logic
+        self._update_row_with_colors(ws, template_ws if template_ws else ws, 
+                                   target_row, header_row, row_to_process)
+        
+        # Clean up any empty rows that might have been created during processing
+        self._remove_empty_rows_after_headers(ws)
+        
+        # Save workbook
+        wb.save(xlsx_path)
+        
+        action = "Updated existing" if xlsx_path.exists() else "Created new"
+        print(f"{action} XLSX file: {xlsx_path}")
+        return str(xlsx_path)
+    
+    def _copy_header_rows(self, source_ws, target_ws):
+        """Copy first two rows from source to target with formatting."""
+        for row_idx in [1, 2]:
+            for col_idx in range(1, source_ws.max_column + 1):
+                source_cell = source_ws.cell(row=row_idx, column=col_idx)
+                target_cell = target_ws.cell(row=row_idx, column=col_idx, value=source_cell.value)
+                
+                # Skip style copying to avoid openpyxl style errors
+                # Just copy values for now
+        
+        # Freeze top two rows
+        target_ws.freeze_panes = "A3"
+    
+    def _remove_empty_rows_after_headers(self, ws):
+        """Remove empty rows between headers and data, moving data up."""
+        print("Checking for empty rows between headers and data...")
+        
+        # Start checking from row 3 (after headers)
+        rows_to_delete = []
+        
+        # Find all empty rows starting from row 3
+        current_row = 3
+        while current_row <= ws.max_row:
+            # Check if the entire row is empty
+            is_empty_row = True
+            for col in range(1, ws.max_column + 1):
+                cell_value = ws.cell(row=current_row, column=col).value
+                if cell_value is not None and str(cell_value).strip():
+                    is_empty_row = False
+                    break
+            
+            if is_empty_row:
+                rows_to_delete.append(current_row)
+                print(f"Found empty row: {current_row}")
+            else:
+                # If we hit a non-empty row, stop looking for consecutive empty rows
+                # But continue if there might be more empty rows later
+                pass
+                
+            current_row += 1
+        
+        # Delete empty rows (in reverse order to maintain row indices)
+        for row_num in reversed(rows_to_delete):
+            print(f"Deleting empty row: {row_num}")
+            ws.delete_rows(row_num)
+        
+        if rows_to_delete:
+            print(f"Removed {len(rows_to_delete)} empty rows, data moved up")
+        else:
+            print("No empty rows found between headers and data")
+    
+    def _find_heat_number_column(self, header_row) -> Optional[int]:
+        """Find the column index for HeatNumber field."""
+        for idx, col in enumerate(header_row):
+            if str(col).lower() in ["heatnumber", "heat number", "heat_number"]:
+                return idx
+        return None
+    
+    def _find_matching_row(self, ws, heat_col_idx: Optional[int], row_data) -> Optional[int]:
+        """Find existing row with matching HeatNumber."""
+        if heat_col_idx is None:
+            return None
+        
+        target_heat_number = row_data[heat_col_idx]
+        if not target_heat_number:
+            return None
+        
+        for row_idx in range(3, ws.max_row + 1):
+            cell_value = ws.cell(row=row_idx, column=heat_col_idx + 1).value
+            if str(cell_value) == str(target_heat_number):
+                return row_idx
+        
+        return None
+    
+    def _update_row_with_colors(self, ws, template_ws, target_row: int, header_row, row_data):
+        """Update row with data and apply color logic."""
+        for col_idx, (header, value) in enumerate(zip(header_row, row_data), 1):
+            cell = ws.cell(row=target_row, column=col_idx, value=value)
+            
+            # Get previous value for color comparison
+            prev_value = None
+            has_color = False
+            
+            # For new files or when template is available, use template for comparison
+            if template_ws and target_row <= template_ws.max_row:
+                template_cell = template_ws.cell(row=target_row, column=col_idx)
+                prev_value = template_cell.value
+                # Check if template cell has any color
+                if template_cell.fill and template_cell.fill.patternType and template_cell.fill.patternType != 'none':
+                    has_color = True
+            
+            # Apply color logic - simplified
+            if str(value) == str(prev_value) and has_color:
+                # Value matches and template had color - copy the fill directly
+                try:
+                    cell.fill = template_cell.fill
+                except Exception:
+                    # If copying fails, set to default
+                    cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+            else:
+                # Value different or no previous color - set to white
+                cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+
 class PDFProcessor:
     """Main orchestrator class for PDF document processing."""
     
@@ -429,6 +906,29 @@ class PDFProcessor:
         )
         
         self.ai_processor = AITemplateProcessor()
+        
+        # Initialize API processor
+        if REQUESTS_PKCS12_AVAILABLE:
+            try:
+                self.api_processor = APIProcessor()
+                print("API processor initialized successfully")
+            except Exception as e:
+                self.api_processor = None
+                print(f"Warning: API processor initialization failed: {e}")
+        else:
+            self.api_processor = None
+            print("Warning: requests_pkcs12 not available. API processing disabled.")
+        
+        # Initialize XLSX processor
+        xlsx_template_path = os.path.join(os.path.dirname(__file__), "Sample json", "pdf_test_output (TEST).xlsx")
+        if OPENPYXL_AVAILABLE and os.path.exists(xlsx_template_path):
+            self.xlsx_processor = XLSXProcessor(xlsx_template_path)
+        else:
+            self.xlsx_processor = None
+            if not OPENPYXL_AVAILABLE:
+                print("Warning: openpyxl not available. XLSX processing disabled.")
+            else:
+                print(f"Warning: XLSX template not found at {xlsx_template_path}. XLSX processing disabled.")
         
         print("PDF Processor initialized successfully")
     
@@ -495,8 +995,50 @@ class PDFProcessor:
         # Step 5: Save output JSON
         final_output_path = self._save_json_output(pdf_path, generated_json, output_path)
         
+        # Step 6: Update XLSX file if processor is available
+        xlsx_path = None
+        if self.xlsx_processor:
+            try:
+                xlsx_path = self.xlsx_processor.update_xlsx_from_json(final_output_path)
+                print(f"Updated XLSX file: {xlsx_path}")
+            except Exception as e:
+                print(f"Warning: Failed to update XLSX file: {e}")
+        
         print(f"Successfully generated: {final_output_path}")
         return final_output_path
+    
+    def process_heat_number(self, heat_number: str, output_dir: Optional[str] = None, auth_token: str = None) -> str:
+        """
+        Process a PDF from API using HeatNumber and return the output JSON file path.
+        Uses enhanced API functionality from the standalone script.
+        
+        Args:
+            heat_number: The heat number to fetch and process
+            output_dir: Optional output directory for JSON file
+            auth_token: Optional authentication token for API access
+            
+        Returns:
+            Path to the generated JSON file
+        """
+        if not self.api_processor:
+            raise RuntimeError("API processor not available. Please check requests_pkcs12 installation and certificate configuration.")
+        
+        print(f"Processing HeatNumber: {heat_number}")
+        
+        # Fetch PDF from API with enhanced functionality
+        try:
+            temp_pdf_path, output_path = self.api_processor.process_heat_number_to_json(heat_number, output_dir, auth_token)
+            
+            # Process the temporary PDF file through the normal workflow
+            result_path = self.process_pdf(temp_pdf_path, output_path)
+            return result_path
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to process HeatNumber {heat_number}: {e}")
+        finally:
+            # Clean up temporary PDF file if it exists
+            if 'temp_pdf_path' in locals() and os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
     
     def _validate_pdf_file(self, pdf_path: str):
         """Validate the input PDF file."""
@@ -511,9 +1053,13 @@ class PDFProcessor:
         if output_path:
             final_path = output_path
         else:
-            # Generate default output path
+            # Save to Sample json folder by default
+            sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
+            os.makedirs(sample_json_dir, exist_ok=True)
+            
+            # Use PDF file's name but save in Sample json folder
             base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-            final_path = os.path.join(os.path.dirname(pdf_path), f"{base_name}.json")
+            final_path = os.path.join(sample_json_dir, f"{base_name}.json")
         
         # Ensure output directory exists
         os.makedirs(os.path.dirname(final_path), exist_ok=True)
@@ -581,9 +1127,11 @@ def main():
             print("\nSelect an option:")
             print("1. Process a single PDF file")
             print("2. Process multiple PDF files")
-            print("3. Exit")
+            print("3. Process JSON to XLSX only")
+            print("4. Process PDF from API by HeatNumber")
+            print("5. Exit")
             
-            choice = input("\nEnter your choice (1-3): ").strip()
+            choice = input("\nEnter your choice (1-5): ").strip()
             
             if choice == "1":
                 # Single file processing
@@ -651,11 +1199,135 @@ def main():
                     print(f"\nError during batch processing: {e}")
 
             elif choice == "3":
+                # JSON to XLSX conversion only
+                if not processor.xlsx_processor:
+                    print("Error: XLSX processing not available. Please ensure openpyxl is installed and template exists.")
+                    continue
+                
+                json_path = input("\nEnter path to JSON file: ").strip()
+                if json_path.startswith('"') and json_path.endswith('"'):
+                    json_path = json_path[1:-1]
+                if json_path.startswith("'") and json_path.endswith("'"):
+                    json_path = json_path[1:-1]
+                
+                if not json_path:
+                    print("Error: Please enter a JSON file path.")
+                    continue
+                
+                try:
+                    xlsx_path = processor.xlsx_processor.update_xlsx_from_json(json_path)
+                    print(f"\n{'='*50}")
+                    print("✅ XLSX Update Complete!")
+                    print(f"📄 Input JSON:  {json_path}")
+                    print(f"📊 Output XLSX: {xlsx_path}")
+                    print("="*50)
+                except Exception as e:
+                    print(f"\nError: {e}")
+
+            elif choice == "4":
+                # Process multiple PDFs from API by HeatNumber with enhanced functionality
+                if not processor.api_processor:
+                    print("Error: API processing not available.")
+                    if not REQUESTS_PKCS12_AVAILABLE:
+                        print("Missing required package: requests_pkcs12")
+                        print("Install with: pip install requests-pkcs12")
+                    else:
+                        print("Please check certificate configuration.")
+                    continue
+                
+                print("\nEnter HeatNumbers to process:")
+                print("Option 1: Enter multiple HeatNumbers (one per line, empty line to finish)")
+                print("Option 2: Enter comma-separated HeatNumbers")
+                
+                input_method = input("Choose input method (1 or 2): ").strip()
+                heat_numbers = []
+                
+                if input_method == "1":
+                    print("Enter HeatNumbers (one per line, empty line to finish):")
+                    while True:
+                        heat_number = input().strip()
+                        if not heat_number:
+                            break
+                        heat_numbers.append(heat_number)
+                
+                elif input_method == "2":
+                    heat_numbers_input = input("Enter comma-separated HeatNumbers: ").strip()
+                    if heat_numbers_input:
+                        heat_numbers = [hn.strip() for hn in heat_numbers_input.split(",") if hn.strip()]
+                
+                else:
+                    print("Invalid input method. Please choose 1 or 2.")
+                    continue
+                
+                if not heat_numbers:
+                    print("Error: No HeatNumbers provided.")
+                    continue
+                
+                # Ask for authentication token (optional)
+                print(f"Default token available: {DEFAULT_AUTH_TOKEN[:20]}...")
+                auth_token = input("Enter auth token (or press Enter to use default): ").strip()
+                if not auth_token:
+                    auth_token = None
+                    print("Using default authentication token")
+                
+                # Ask for output directory
+                output_dir = input("Enter output directory (or press Enter for Sample json folder): ").strip()
+                if not output_dir:
+                    output_dir = None
+                
+                # Process multiple HeatNumbers
+                try:
+                    print(f"\nProcessing {len(heat_numbers)} HeatNumbers...")
+                    print("=" * 60)
+                    
+                    successful_results = []
+                    failed_results = []
+                    
+                    for i, heat_number in enumerate(heat_numbers, 1):
+                        try:
+                            print(f"\nProcessing {i}/{len(heat_numbers)}: {heat_number}")
+                            print("Using enhanced API functionality...")
+                            
+                            result_path = processor.process_heat_number(heat_number, output_dir, auth_token)
+                            successful_results.append((heat_number, result_path))
+                            
+                            print(f"✅ {heat_number}: Success")
+                            print(f"   📋 JSON: {result_path}")
+                            
+                        except Exception as e:
+                            failed_results.append((heat_number, str(e)))
+                            print(f"❌ {heat_number}: Failed - {e}")
+                    
+                    # Summary
+                    print(f"\n{'='*60}")
+                    print("🎯 Batch API Processing Complete!")
+                    print(f"✅ Successfully processed: {len(successful_results)} HeatNumbers")
+                    
+                    if successful_results:
+                        print("\nSuccessful HeatNumbers:")
+                        for heat_number, result_path in successful_results:
+                            print(f"   � {heat_number} → {result_path}")
+                    
+                    if failed_results:
+                        print(f"\n❌ Failed: {len(failed_results)} HeatNumbers")
+                        for heat_number, error in failed_results:
+                            print(f"   🔢 {heat_number}: {error}")
+                    
+                    if processor.xlsx_processor and successful_results:
+                        print(f"\n📊 XLSX file updated with {len(successful_results)} records")
+                    
+                    print("=" * 60)
+                    
+                except Exception as e:
+                    print(f"\nError during batch processing: {e}")
+                    print("Tip: Verify your HeatNumbers and authentication token are correct.")
+
+            elif choice == "5":
                 print("\nGoodbye! 👋")
                 break
             
             else:
-                print("Invalid choice. Please enter 1, 2, or 3.")
+                print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
     
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")

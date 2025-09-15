@@ -1,0 +1,88 @@
+{
+  "CompanyMTRFileID": null,
+  "HeatNumber": "W3L644",
+  "CertificationDate": "05/17/2024",
+  "MatlFacilityDetails": {
+    "PipeManufacturerName": "Berg Pipe Panama City Corp",
+    "PipeManufacturerLocation": "Panama City, FL"
+  },
+  "HNPipeDetails": [
+    {
+      "PipeNumber": "410285-6",
+      "HNPipeTensileTestResults": {
+        "YieldStrength": "68.8",
+        "YieldStrengthUnit": "ksi",
+        "UltimateTensileStrength": "88.6",
+        "UltimateTensileStrengthUnit": "ksi",
+        "YTRatio": "0.78",
+        "SeamWeldTensileStrength": "90.9",
+        "SeamWeldTensileStrengthUnits": "ksi"
+      },
+      "HNPipeHeatChemicalResults": {
+        "HeatC": "0.06",
+        "HeatMn": "1.34",
+        "HeatP": "0.010",
+        "HeatS": "0.001",
+        "HeatCbNb": "0.046",
+        "HeatSi": "0.028",
+        "HeatTi": "0.014",
+        "HeatCu": "0.26",
+        "HeatNi": "0.11",
+        "HeatMo": "0.06",
+        "HeatCr": "0.17",
+        "HeatV": "0.005",
+        "HeatAl": "0.29",
+        "HeatB": "0.0001",
+        "HeatN": "0.005",
+        "HeatCa": "0.0014",
+        "HeatCEPcm": "0.160",
+        "HeatCEPcmCriteria": null,
+        "HeatCEIIW": "0.355",
+        "HeatCEIIWCriteria": null
+      },
+      "HNPipeChemicalCompResults": {
+        "Product1C": "0.06",
+        "Product1Mn": "1.29",
+        "Product1P": "0.009",
+        "Product1S": "0.001",
+        "Product1CbNb": "0.045",
+        "Product1Si": "0.027",
+        "Product1Ti": "0.014",
+        "Product1Cu": "0.25",
+        "Product1Ni": "0.11",
+        "Product1Mo": "0.06",
+        "Product1Cr": "0.16",
+        "Product1V": "0.004",
+        "Product1Al": "0.29",
+        "Product1B": "0.0001",
+        "Product1N": "0.007",
+        "Product1Ca": "0.0014",
+        "Product1NbVTi": null,
+        "Product2C": "0.06",
+        "Product2Mn": "1.31",
+        "Product2P": "0.009",
+        "Product2S": "0.001",
+        "Product2CbNb": "0.045",
+        "Product2Si": "0.026",
+        "Product2Ti": "0.015",
+        "Product2Cu": "0.24",
+        "Product2Ni": "0.12",
+        "Product2Mo": "0.06",
+        "Product2Cr": "0.16",
+        "Product2V": "0.005",
+        "Product2Al": "0.29",
+        "Product2B": "0.0001",
+        "Product2N": "0.006",
+        "Product2Ca": "0.0013"
+      },
+      "HNPipeChemicalEquivResults": {
+        "Product1CEPcm": "0.160",
+        "ProductCEPcmCriteria": null,
+        "Product1CEIIW": "0.344",
+        "ProductCEIIWCriteria": null,
+        "Product2CEPcm": "0.160",
+        "Product2CEIIW": "0.347"
+      }
+    }
+  ]
+}

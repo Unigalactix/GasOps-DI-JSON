@@ -1,0 +1,88 @@
+{
+  "CompanyMTRFileID": null,
+  "HeatNumber": "PC0314",
+  "CertificationDate": "04/16/2025",
+  "MatlFacilityDetails": {
+    "PipeManufacturerName": "Vallourec Star LP",
+    "PipeManufacturerLocation": "2669 Martin Luther King Jr Blvd Youngstown, OH 44510"
+  },
+  "HNPipeDetails": [
+    {
+      "PipeNumber": "",
+      "HNPipeTensileTestResults": {
+        "YieldStrength": "54.3",
+        "YieldStrengthUnit": "ksi",
+        "UltimateTensileStrength": "76.9",
+        "UltimateTensileStrengthUnit": "ksi",
+        "YTRatio": "0.71",
+        "SeamWeldTensileStrength": "",
+        "SeamWeldTensileStrengthUnits": ""
+      },
+      "HNPipeHeatChemicalResults": {
+        "HeatC": "0.21",
+        "HeatMn": "0.80",
+        "HeatP": "0.008",
+        "HeatS": "0.006",
+        "HeatCbNb": "0.002",
+        "HeatSi": "0.23",
+        "HeatTi": "0.002",
+        "HeatCu": "0.14",
+        "HeatNi": "0.05",
+        "HeatMo": "0.02",
+        "HeatCr": "0.08",
+        "HeatV": "0.036",
+        "HeatAl": "0.0016",
+        "HeatB": "0.0004",
+        "HeatN": "0.0078",
+        "HeatCa": "0.000",
+        "HeatCEPcm": "0.37",
+        "HeatCEPcmCriteria": "",
+        "HeatCEIIW": "",
+        "HeatCEIIWCriteria": ""
+      },
+      "HNPipeChemicalCompResults": {
+        "Product1C": "0.20",
+        "Product1Mn": "0.77",
+        "Product1P": "0.007",
+        "Product1S": "0.004",
+        "Product1CbNb": "0.001",
+        "Product1Si": "0.23",
+        "Product1Ti": "0.002",
+        "Product1Cu": "0.15",
+        "Product1Ni": "0.05",
+        "Product1Mo": "0.02",
+        "Product1Cr": "0.08",
+        "Product1V": "0.036",
+        "Product1Al": "0.0014",
+        "Product1B": "0.0001",
+        "Product1N": "0.0080",
+        "Product1Ca": "0.000",
+        "Product1NbVTi": "",
+        "Product2C": "0.21",
+        "Product2Mn": "0.78",
+        "Product2P": "0.008",
+        "Product2S": "0.005",
+        "Product2CbNb": "0.001",
+        "Product2Si": "0.23",
+        "Product2Ti": "0.002",
+        "Product2Cu": "0.15",
+        "Product2Ni": "0.05",
+        "Product2Mo": "0.02",
+        "Product2Cr": "0.08",
+        "Product2V": "0.036",
+        "Product2Al": "0.0012",
+        "Product2B": "0.0001",
+        "Product2N": "0.0091",
+        "Product2Ca": "0.000"
+      },
+      "HNPipeChemicalEquivResults": {
+        "Product1CEPcm": "0.36",
+        "ProductCEPcmCriteria": "",
+        "Product1CEIIW": "",
+        "ProductCEIIWCriteria": "",
+        "Product2CEPcm": "0.37",
+        "Product2CEIIW": ""
+      }
+    }
+  ]
+}
