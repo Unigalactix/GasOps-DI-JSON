@@ -4,3 +4,7 @@ pytest
 openai
 requests-pkcs12
 openpyxl
+azure-ai-documentintelligence
+azure-identity
+azure-core
+azure-ai-formrecognizer
