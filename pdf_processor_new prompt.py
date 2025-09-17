@@ -142,7 +142,7 @@ def GetMTRFileDatabyHeatNumber(heat_number=None, company_mtr_file_id=None, auth_
     return call_weld_api("GetMTRFileDatabyHeatNumber", parameters, auth_token)
 
 # Default authentication token
-DEFAULT_AUTH_TOKEN = "OS8xNi8yMDI1IDg6NTU6NTQgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNS8yMDI1IDg6NTU6NTQgUE0mQ0VERU1P"
+DEFAULT_AUTH_TOKEN = "OS8xNy8yMDI1IDc6MzM6MzYgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNi8yMDI1IDc6MzM6MzYgUE0mQ0VERU1P"
 
 
 class DocumentIntelligenceOCR:
@@ -625,11 +625,11 @@ class APIProcessor:
                 # Save to Sample json folder
                 sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
                 os.makedirs(sample_json_dir, exist_ok=True)
-                pdf_path = os.path.join(sample_json_dir, f"MTR_{heat_number}.pdf")
+                pdf_path = os.path.join(sample_json_dir, f"{heat_number}.pdf")
             else:
                 # Temp directory
                 temp_dir = tempfile.gettempdir()
-                pdf_path = os.path.join(temp_dir, f"MTR_{heat_number}.pdf")
+                pdf_path = os.path.join(temp_dir, f"{heat_number}.pdf")
 
             with open(pdf_path, 'wb') as pdf_file:
                 pdf_file.write(pdf_data)
@@ -663,12 +663,12 @@ class APIProcessor:
         
         # Set output path
         if output_dir:
-            output_path = os.path.join(output_dir, f"MTR_{heat_number}.json")
+            output_path = os.path.join(output_dir, f"{heat_number}.json")
         else:
             # Save to Sample json folder by default
             sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
             os.makedirs(sample_json_dir, exist_ok=True)
-            output_path = os.path.join(sample_json_dir, f"MTR_{heat_number}.json")
+            output_path = os.path.join(sample_json_dir, f"{heat_number}.json")
         
         return temp_pdf_path, output_path
 

@@ -6,6 +6,7 @@
     "PipeManufacturerName": "Vallourec Star LP",
     "PipeManufacturerLocation": "2669 Martin Luther King Jr Blvd Youngstown, OH 44510"
   },
+  
   "HNPipeDetails": [
     {
       "PipeNumber": "",
@@ -18,6 +19,8 @@
         "SeamWeldTensileStrength": "",
         "SeamWeldTensileStrengthUnits": ""
       },
+
+
       "HNPipeHeatChemicalResults": {
         "HeatC": "0.21",
         "HeatMn": "0.80",
@@ -30,16 +33,17 @@
         "HeatNi": "0.05",
         "HeatMo": "0.02",
         "HeatCr": "0.08",
-        "HeatV": "0.036",
-        "HeatAl": "0.0016",
+        "HeatV": "0.002",
+        "HeatAl": "0.036",
         "HeatB": "0.0004",
         "HeatN": "0.0078",
-        "HeatCa": "0.000",
+        "HeatCa": "0.0016",
         "HeatCEPcm": "0.37",
         "HeatCEPcmCriteria": "",
         "HeatCEIIW": "",
         "HeatCEIIWCriteria": ""
       },
+
       "HNPipeChemicalCompResults": {
         "Product1C": "0.20",
         "Product1Mn": "0.77",
@@ -52,11 +56,11 @@
         "Product1Ni": "0.05",
         "Product1Mo": "0.02",
         "Product1Cr": "0.08",
-        "Product1V": "0.036",
-        "Product1Al": "0.0014",
+        "Product1V": "0.001",
+        "Product1Al": "0.036",
         "Product1B": "0.0001",
         "Product1N": "0.0080",
-        "Product1Ca": "0.000",
+        "Product1Ca": "0.0014",
         "Product1NbVTi": "",
         "Product2C": "0.21",
         "Product2Mn": "0.78",
@@ -69,12 +73,13 @@
         "Product2Ni": "0.05",
         "Product2Mo": "0.02",
         "Product2Cr": "0.08",
-        "Product2V": "0.036",
-        "Product2Al": "0.0012",
+        "Product2V": "0.001",
+        "Product2Al": "0.036",
         "Product2B": "0.0001",
         "Product2N": "0.0091",
-        "Product2Ca": "0.000"
+        "Product2Ca": "0.0012"
       },
+
       "HNPipeChemicalEquivResults": {
         "Product1CEPcm": "0.36",
         "ProductCEPcmCriteria": "",

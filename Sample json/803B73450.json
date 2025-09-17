@@ -35,9 +35,9 @@
         "HeatB": "0.0002",
         "HeatN": "0.009",
         "HeatCa": "0.12",
-        "HeatCEPcm": null,
+        "HeatCEPcm": "0.17",
         "HeatCEPcmCriteria": null,
-        "HeatCEIIW": null,
+        "HeatCEIIW": "0.34",
         "HeatCEIIWCriteria": null
       },
       "HNPipeChemicalCompResults": {
@@ -57,7 +57,7 @@
         "Product1B": "0.0004",
         "Product1N": "0.009",
         "Product1Ca": "0.12",
-        "Product1NbVTi": "0.034",
+        "Product1NbVTi": null,
         "Product2C": "0.08",
         "Product2Mn": "1.44",
         "Product2P": "0.012",
@@ -76,12 +76,12 @@
         "Product2Ca": "0.12"
       },
       "HNPipeChemicalEquivResults": {
-        "Product1CEPcm": null,
+        "Product1CEPcm": "0.17",
         "ProductCEPcmCriteria": null,
-        "Product1CEIIW": null,
+        "Product1CEIIW": "0.34",
         "ProductCEIIWCriteria": null,
-        "Product2CEPcm": null,
-        "Product2CEIIW": null
+        "Product2CEPcm": "0.17",
+        "Product2CEIIW": "0.34"
       }
     }
   ]
