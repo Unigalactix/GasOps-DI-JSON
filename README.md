@@ -30,154 +30,121 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_KEY=your_openai_key
 AZURE_OPENAI_DEPLOYMENT=your_deployment_name
 
-# Option 2: OpenAI
-OPENAI_API_KEY=your_openai_api_key
-```
-
-## Usage
-
-Simply run the application and follow the interactive prompts:
-
-```bash
-python pdf_processor.py
-```
-
-The application will:
-1. Check your configuration
-2. Ask for the PDF file path
 # PDF Document Intelligence Processor
 
-An interactive, easy-to-use application that converts PDF materials testing reports (MTRs) into structured JSON files. It's designed so a non-technical user can run PDFs through an OCR + AI pipeline and get consistent JSON output based on a template.
+An interactive toolchain that converts material test report (MTR) PDFs into structured JSON using Azure Document Intelligence (OCR) and AI, with optional API integrations to fetch PDFs by HeatNumber and to POST results back to the database.
 
-## What this repo contains
-- `pdf_processor.py` — original script (interactive CLI).
-- `pdf_processor_oop.py` — new object-oriented processor with clearer components.
-- `Sample json/sample.json` — JSON template that AI will populate.
-- `TESTS/` — small helper scripts and tests.
+## Highlights
 
-## High-level workflow (for non-technical users)
-1. Prepare a PDF file (the MTR/certificate PDF you want to digitize).
-2. Add credentials to a `.env` file (copy `.env.template` and fill keys).
-3. Run the processor and enter the PDF path when asked.
-4. The app will extract text (OCR), send it to the AI to map into the template, and save `{input_filename}.json` next to the PDF.
+- Interactive CLI with multiple flows (local PDF, batch, API by HeatNumber, XLSX update, POST uploader)
+- Azure Document Intelligence for OCR + Azure OpenAI/OpenAI for schema mapping
+- Ensures JSON includes mandatory fields: CompanyMTRFileID and HeatNumber (API-by-HeatNumber path)
+- XLSX updater that merges JSON into a template with simple color logic
+- Debug logging for API responses saved in `debug/` on failures
 
-## Versions and environment (what was used to build & test)
-- Python: 3.11 (the devcontainer uses Python 3.11 / Debian Bullseye image).
-- Local Python (this machine): 3.13.7
- - Recommended Python compatibility: >=3.11, <=3.13
-- Key packages (see `requirements.txt`):
-  - python-dotenv — load `.env` files
-  - requests — HTTP calls to Azure and OpenAI
-  - openai — OpenAI client (optional)
-  - pytest — lightweight testing utility
+## Versions and environment
 
-These packages are simple to install with `pip install -r requirements.txt`.
+- Local Python (this machine): 3.12.x (Windows)
+- Recommended Python: >=3.11, <=3.13
+- Dependencies are pinned in `requirements.txt` for reproducible installs
 
-## Detailed, step-by-step guide (non-technical)
-
-### 1) Create a `.env` file
-1. Copy the `.env.template` file and rename it to `.env` in the project root.
+Install dependencies (PowerShell):
+```powershell
 2. Open `.env` in a text editor and paste your keys where shown:
+```
+
+## Configure environment (.env)
+
+Create a `.env` in the project root (copy `.env.template` and fill values):
+
+```ini
+# Azure Document Intelligence (required)
+AZURE_DI_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com/
+AZURE_DI_KEY=your_azure_di_key
+AZURE_DI_MODEL_ID=prebuilt-document
+AZURE_DI_API_VERSION=2023-07-31
+
+# AI (choose one)
+# Azure OpenAI
+# AZURE_OPENAI_ENDPOINT=https://your-openai-resource.openai.azure.com/
+# AZURE_OPENAI_KEY=your_azure_openai_key
+# AZURE_OPENAI_DEPLOYMENT=your_deployment_name
+# AZURE_OPENAI_API_VERSION=2023-10-01
+# Or OpenAI
+# OPENAI_API_KEY=your_openai_api_key
+
+# Auth bootstrap for external API (required for API-based flows)
+# Base64 of: LoginMasterID&Database_Name&OrgID
+encoded_string=BASE64_LOGINMASTERID_AND_DBNAME_AND_ORGID
+```
+
+Note: the scripts read `encoded_string` (lowercase) to derive an API auth token at runtime.
+
+## Entry points
+
+There are two primary CLIs you’ll use from the repo root:
+
+1) Object-oriented processor with API fetch and XLSX mapping (recommended)
+
+```powershell
 	- For OCR (Azure Document Intelligence):
 	  - `AZURE_DI_ENDPOINT` — e.g. `https://your-resource.cognitiveservices.azure.com/`
 	  - `AZURE_DI_KEY` — the secret key for the resource
+
+Key menu options:
+- 1: Process a single local PDF → produces JSON
+- 2: Process multiple local PDFs → produces JSONs
+- 3: JSON → XLSX merge/update (uses template under Sample json/)
+- 4: Fetch by HeatNumber via API → OCR+AI → JSON
+  - Uses your `encoded_string` to build an auth token automatically
+  - Enforces CompanyMTRFileID and HeatNumber in the output JSON
+  - On API errors, prints status/body preview and saves full response to `debug/`
+
+2) Standalone uploader (POST JSON to database)
+
+```powershell
 	- For AI (choose one):
 	  - Azure OpenAI: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT`
-	  - OR OpenAI: `OPENAI_API_KEY`
 
-If you don't have these keys, contact the person or team that manages your Azure/OpenAI account — they will provide them.
+Features:
+- Scans `Sample json/` for JSON files and posts them to AddUpdateMTRMetadata
+- Uses the same auth bootstrap from `encoded_string`
+- Certificate-based client auth using `./certificate/oamsapicert2023.pfx`
+- “Test API connection” option to validate connectivity quickly
 
-### 2) Install Python dependencies (one-time)
-Open a terminal (Windows PowerShell) and run:
-```powershell
-pip install -r requirements.txt
+## Certificate
+
+Both API flows (fetch by HeatNumber and posting results) use a client certificate located at:
+
+```
+./certificate/oamsapicert2023.pfx
 ```
 
-If you'd like to keep dependencies isolated, create and use a virtual environment (recommended). On Windows PowerShell:
+Ensure the file exists at that path. The password is set in code as `password1234`. If your certificate or password differs, update the code or provide an override mechanism (future improvement).
 
-```powershell
-# create a venv in the project folder
-python -m venv .venv
+## Typical workflow
 
-# activate the venv
-.\.venv\Scripts\Activate.ps1
+1) Prepare `.env` with Azure keys and `encoded_string`
+2) Run the processor, choose flow:
+   - Local PDFs (options 1/2) → JSON goes to `Sample json/`
+   - API by HeatNumber (option 4) → PDF is fetched and processed → JSON goes to `Sample json/`
+3) Optionally run `post_mtr_data.py` to upload the generated JSONs to the database
 
-# then install dependencies inside the venv
-pip install -r requirements.txt
-```
+## Troubleshooting
 
-To deactivate the virtual environment, run:
+- “Invalid API response format”: the tool prints status and a 500-char body preview, and saves the full response under `debug/`. Common causes are invalid/expired token, cert mismatch, or API shape changes.
+- “Missing Azure credentials”: set `AZURE_DI_ENDPOINT` and `AZURE_DI_KEY` in `.env`.
+- “AI did not return valid JSON”: the tool tries to extract JSON; edit the output manually if needed and re-run XLSX update.
+If you need help, capture the console output and the debug file path (if any) and share it.
 
-```powershell
-deactivate
-```
+## Developer notes (brief)
 
-### 3) Run the processor (interactive)
-You can use either the original script or the new object-oriented script. From the project folder run one of:
-```powershell
-# original CLI
-python pdf_processor.py
+- Main CLI: `pdf_processor_new prompt.py` (object-oriented)
+- Uploader CLI: `post_mtr_data.py`
+- Token/bootstrap helpers: `decryption.py`
+- Tests: `TESTS/`
 
-# new, organized CLI (recommended)
-python pdf_processor_oop.py
-```
+Future ideas: pluggable certificate path/password via env, GUI front-end, stricter validation rules, CI tests.
 
-When prompted, enter the full path to the PDF file (or a URL if configured). Press Enter and follow prompts. If you choose default output, the JSON will be saved alongside the PDF with the same base name.
-
-### 4) What the program does (simple terms)
-- Step 1 — OCR: It sends the PDF to Azure's Document Intelligence and gets back the raw text and detected tables.
-- Step 2 — AI mapping: It sends that text plus a blank template (sample.json) to an AI model which fills in the template fields with data found in the text.
-- Step 3 — Save: The filled-in JSON is saved to disk.
-
-## Where the output goes
-- By default the JSON file is saved in the same folder as the input PDF with the same filename and `.json` extension.
-- You can optionally specify a custom output file or directory in the prompts.
-
-## Template (what the AI fills)
-- The template file is `Sample json/sample.json`. It defines the fields (company, heat number, chemical composition, mechanical test results, etc.). The AI will fill those fields using values it finds in the PDF.
-
-## Common questions (non-technical)
-
-Q: What keys/credentials do I need and where do I get them?
-A: You need:
-- Azure Document Intelligence endpoint and key — provided by whoever manages your Azure subscriptions.
-- Optionally, Azure OpenAI deployment credentials or an OpenAI API key for the AI step.
-
-Q: Can I drag-and-drop a PDF into the app?
-A: No. For now you type/paste the file path when prompted. The newer script supports entering multiple file paths for batch processing.
 
 Q: What if the AI outputs incorrect values?
-A: The AI does its best to map text into the template. If data is wrong, open the output JSON in a text editor and correct values manually. Keep a copy of the original PDF.
-
-Q: Can I use an online URL instead of a local file?
-A: The scripts expect local files by default. You can provide a URL in the newer OOP script if the helper to download URLs is enabled — ask me and I will add it.
-
-## Troubleshooting (simple steps)
-
-1. "The program says missing credentials":
-	- Open `.env` and make sure `AZURE_DI_ENDPOINT` and `AZURE_DI_KEY` are present. If using AI, ensure either Azure OpenAI or OpenAI key is set.
-
-2. "File not found":
-	- Ensure you typed/pasted the correct full path to the PDF. On Windows, paths look like `C:\Users\You\Documents\file.pdf`.
-
-3. "OCR or API errors (403, network)":
-	- 403 means the key or resource is blocked. Check the Azure resource networking settings or confirm the key is correct.
-	- Network errors may mean your machine cannot reach Azure; try again from a network that allows outbound requests.
-
-4. "AI did not return valid JSON":
-	- This can happen when the AI returns text around the JSON. The scripts try to extract valid JSON, but sometimes manual correction is necessary.
-
-If you can't resolve an issue, copy the program output and share it with a technical person or me and I will help.
-
-## Developer notes (brief, for maintainers)
-- The repo contains two main entry points: `pdf_processor.py` (original) and `pdf_processor_oop.py` (refactored). The latter splits responsibilities into `DocumentIntelligenceOCR`, `AITemplateProcessor`, and `PDFProcessor` classes for easier testing and extension.
-- Use `pytest` to run basic tests in `TESTS/`.
-
-## Next steps / Improvements 
-- Add URL-download support so you can paste HTTP links to PDFs.
-- Add a simple GUI or drag-and-drop front-end.
-- Add automatic validation rules for chemical and mechanical fields.
-- Add CI tests and a GitHub Actions workflow.
-
----
-
