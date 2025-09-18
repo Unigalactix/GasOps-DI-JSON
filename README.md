@@ -1,70 +1,70 @@
-# PDF Document Intelligence Processor
+# PDF Document Intelligence Processor (Modular)
 
-An interactive application that processes PDF files using Azure Document Intelligence and AI to generate structured JSON output based on a template.
-
-## Features
-
-- Interactive command-line interface - just run and follow prompts
-- Processes PDF files using Azure Document Intelligence (prebuilt-read model)
-- Uses AI (Azure OpenAI or OpenAI) to extract and structure data
-- Generates JSON output based on the sample.json template
-- Built-in error handling and validation
-- Option to process multiple files in one session
-
-## Setup
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Configure credentials in `.env` file:
-```bash
-# Azure Document Intelligence
-AZURE_DI_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com/
-AZURE_DI_KEY=your_32_character_api_key_here
-
-# AI Configuration (choose one)
-# Option 1: Azure OpenAI
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_KEY=your_openai_key
-AZURE_OPENAI_DEPLOYMENT=your_deployment_name
-
-# PDF Document Intelligence Processor
-
-An interactive toolchain that converts material test report (MTR) PDFs into structured JSON using Azure Document Intelligence (OCR) and AI, with optional API integrations to fetch PDFs by HeatNumber and to POST results back to the database.
+Processes MTR PDFs into structured JSON using Azure Document Intelligence (OCR) + AI, with API helpers to fetch PDFs by HeatNumber and POST results back. The codebase is now modular with tiny drivers and a clean `output/` folder for generated files.
 
 ## Highlights
 
-- Interactive CLI with multiple flows (local PDF, batch, API by HeatNumber, XLSX update, POST uploader)
-- Azure Document Intelligence for OCR + Azure OpenAI/OpenAI for schema mapping
-- Ensures JSON includes mandatory fields: CompanyMTRFileID and HeatNumber (API-by-HeatNumber path)
-- XLSX updater that merges JSON into a template with simple color logic
-- Debug logging for API responses saved in `debug/` on failures
+- Modular package under `mtr_processor/` and small CLI entry points
+- Azure Document Intelligence for OCR; Azure OpenAI/OpenAI optional for mapping
+- API fetch by HeatNumber (mTLS + time-based auth token)
+- Ensures CompanyMTRFileID and HeatNumber present in API-path JSON
+- JSONs saved to `output/` by default (keeps `Sample json/` clean)
+- Optional uploader to POST JSONs back to the database
+- Debug: raw API responses saved to `debug/` on schema/auth failures
 
-## Versions and environment
+## Folder structure
 
-- Local Python (this machine): 3.12.x (Windows)
-- Recommended Python: >=3.11, <=3.13
-- Dependencies are pinned in `requirements.txt` for reproducible installs
-
-Install dependencies (PowerShell):
-```powershell
-2. Open `.env` in a text editor and paste your keys where shown:
+```
+GasOps-DI-JSON/
+├─ mtr_processor/
+│  ├─ auth/
+│  │  └─ tokens.py              # get_default_auth_token() wrapper
+│  ├─ api/
+│  │  └─ weld_client.py         # WeldAPIClient (requests_pkcs12)
+│  ├─ ocr/
+│  │  └─ di_ocr.py              # DocumentIntelligenceOCR wrapper
+│  ├─ ai/
+│  │  └─ template_processor.py  # AITemplateProcessor wrapper
+│  ├─ excel/
+│  │  └─ xlsx_processor.py      # XLSXProcessor wrapper
+│  ├─ pipeline/
+│  │  ├─ api_processor.py       # APIProcessor wrapper
+│  │  └─ pdf_processor.py       # PDFProcessor wrapper
+│  └─ utils/
+│     └─ loader.py              # Robust importer for legacy file
+├─ cli/
+│  ├─ process_heat.py           # Minimal driver: fetch-by-Heat → JSON
+│  └─ post_mtr_data.py          # Minimal driver: POST JSONs
+├─ output/                      # Generated JSONs and PDFs (default)
+├─ debug/                       # Saved raw API responses on failure
+├─ pdf_processor_new prompt.py  # Legacy implementations (still used)
+├─ post_mtr_data.py             # MTRDataPoster (used by CLI)
+├─ decryption.py                # Token decoding + generator
+├─ requirements.txt             # Pinned versions
+├─ .env.template                # Example environment variables
+└─ Sample json/                 # Samples/templates only
 ```
 
-## Configure environment (.env)
+Note: wrappers import the actual class implementations from `pdf_processor_new prompt.py` to avoid duplication during the transition. We can fully migrate those into `mtr_processor/` next if you want to remove the legacy file.
 
-Create a `.env` in the project root (copy `.env.template` and fill values):
+## Setup
+
+Install dependencies (Windows PowerShell):
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Create `.env` at repo root (copy `.env.template` and fill values):
 
 ```ini
-# Azure Document Intelligence (required)
+# Azure Document Intelligence (required for OCR)
 AZURE_DI_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com/
 AZURE_DI_KEY=your_azure_di_key
 AZURE_DI_MODEL_ID=prebuilt-document
 AZURE_DI_API_VERSION=2023-07-31
 
-# AI (choose one)
+# AI (optional, choose one)
 # Azure OpenAI
 # AZURE_OPENAI_ENDPOINT=https://your-openai-resource.openai.azure.com/
 # AZURE_OPENAI_KEY=your_azure_openai_key
@@ -78,73 +78,121 @@ AZURE_DI_API_VERSION=2023-07-31
 encoded_string=BASE64_LOGINMASTERID_AND_DBNAME_AND_ORGID
 ```
 
-Note: the scripts read `encoded_string` (lowercase) to derive an API auth token at runtime.
+Both `ENCODED_STRING` and `encoded_string` are supported; `encoded_string` is used in most scripts.
 
-## Entry points
+## How to run
 
-There are two primary CLIs you’ll use from the repo root:
-
-1) Object-oriented processor with API fetch and XLSX mapping (recommended)
+Process a HeatNumber (fetch PDF via API → OCR/AI → JSON in `output/`):
 
 ```powershell
-	- For OCR (Azure Document Intelligence):
-	  - `AZURE_DI_ENDPOINT` — e.g. `https://your-resource.cognitiveservices.azure.com/`
-	  - `AZURE_DI_KEY` — the secret key for the resource
+python -m cli.process_heat <HEAT_NUMBER>
+```
 
-Key menu options:
-- 1: Process a single local PDF → produces JSON
-- 2: Process multiple local PDFs → produces JSONs
-- 3: JSON → XLSX merge/update (uses template under Sample json/)
-- 4: Fetch by HeatNumber via API → OCR+AI → JSON
-  - Uses your `encoded_string` to build an auth token automatically
-  - Enforces CompanyMTRFileID and HeatNumber in the output JSON
-  - On API errors, prints status/body preview and saves full response to `debug/`
-
-2) Standalone uploader (POST JSON to database)
+Optional custom output directory:
 
 ```powershell
-	- For AI (choose one):
-	  - Azure OpenAI: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT`
+python -m cli.process_heat <HEAT_NUMBER> "C:\path\to\folder"
+```
 
-Features:
-- Scans `Sample json/` for JSON files and posts them to AddUpdateMTRMetadata
-- Uses the same auth bootstrap from `encoded_string`
-- Certificate-based client auth using `./certificate/oamsapicert2023.pfx`
-- “Test API connection” option to validate connectivity quickly
+Post JSONs to the database (defaults to `output/`):
+
+```powershell
+python -m cli.post_mtr_data
+```
+
+Or interactive uploader:
+
+```powershell
+python post_mtr_data.py
+```
 
 ## Certificate
 
-Both API flows (fetch by HeatNumber and posting results) use a client certificate located at:
+Both API flows (GET by HeatNumber and POST) use a client certificate:
 
 ```
 ./certificate/oamsapicert2023.pfx
 ```
 
-Ensure the file exists at that path. The password is set in code as `password1234`. If your certificate or password differs, update the code or provide an override mechanism (future improvement).
+Ensure the file exists at that path. The default password is `password1234` in code; update if your cert is different.
+
+## Architecture diagram
+
+```
+				 +-----------------------------+
+				 |        CLI (Drivers)        |
+				 |-----------------------------|
+				 | cli/process_heat.py         |
+				 | cli/post_mtr_data.py        |
+				 +---------------+-------------+
+									  |
+									  v
+					  +-----------+-----------+
+					  |        mtr_processor  |
+					  |  (modular components) |
+					  +-----------+-----------+
+									  |
+	  +-----------------------+-----------------------+
+	  |                       |                       |
+	  v                       v                       v
+ +---+----+            +-----+------+          +-----+------+
+ |  ocr   |            |   api      |          |   excel    |
+ | di_ocr |            | weld_client|          | xlsx_proc  |
+ +---+----+            +-----+------+          +-----+------+
+	  |                       |                       |
+	  v                       v                       v
+ DocumentIntelligence  requests_pkcs12+mTLS     openpyxl template
+ (Azure DI OCR)        (GET/POST API)           (XLSX merge)
+
+									  ^
+									  |
+							  +-----+------+
+							  |   ai       |
+							  | template_  |
+							  | processor  |
+							  +------------+
+							  (Azure OpenAI/OpenAI)
+
+									  ^
+									  |
+							  +-----+------+
+							  |   auth     |
+							  |  tokens    |
+							  +------------+
+							  (ENCODED_STRING → token)
+
+									  ^
+									  |
+							+-------+--------+
+							| Legacy Orchestrator |
+							| pdf_processor_new    |
+							| prompt.py (classes)  |
+							+----------------------+
+```
+
+Notes:
+- The wrappers import class implementations from the legacy file via a robust loader (`mtr_processor/utils/loader.py`).
+- We can migrate those implementations into the package to remove the legacy file entirely.
 
 ## Typical workflow
 
-1) Prepare `.env` with Azure keys and `encoded_string`
-2) Run the processor, choose flow:
-   - Local PDFs (options 1/2) → JSON goes to `Sample json/`
-   - API by HeatNumber (option 4) → PDF is fetched and processed → JSON goes to `Sample json/`
-3) Optionally run `post_mtr_data.py` to upload the generated JSONs to the database
+1) Fill `.env` with Azure DI keys and `encoded_string`.
+2) Run the HeatNumber flow to produce JSON in `output/`:
+	- `python -m cli.process_heat <HEAT_NUMBER>`
+3) Optionally upload JSONs:
+	- `python -m cli.post_mtr_data` or `python post_mtr_data.py`
 
 ## Troubleshooting
 
-- “Invalid API response format”: the tool prints status and a 500-char body preview, and saves the full response under `debug/`. Common causes are invalid/expired token, cert mismatch, or API shape changes.
-- “Missing Azure credentials”: set `AZURE_DI_ENDPOINT` and `AZURE_DI_KEY` in `.env`.
-- “AI did not return valid JSON”: the tool tries to extract JSON; edit the output manually if needed and re-run XLSX update.
-If you need help, capture the console output and the debug file path (if any) and share it.
+- Invalid API response format: we print status and a short body preview and save the full body to `debug/`. Common causes: expired token, cert mismatch, or changed response schema.
+- Missing Azure credentials: set `AZURE_DI_ENDPOINT` and `AZURE_DI_KEY` in `.env`.
+- AI output not valid JSON: the tool attempts to extract JSON. If it fails, you can edit the JSON and re-run the XLSX update flow.
 
-## Developer notes (brief)
+## Developer notes
 
-- Main CLI: `pdf_processor_new prompt.py` (object-oriented)
-- Uploader CLI: `post_mtr_data.py`
-- Token/bootstrap helpers: `decryption.py`
-- Tests: `TESTS/`
+- Main orchestrator implementations currently live in `pdf_processor_new prompt.py` and are imported by wrappers.
+- Uploader class (`MTRDataPoster`) currently lives in `post_mtr_data.py` and is used by `cli/post_mtr_data.py`.
+- Token helpers: `mtr_processor/auth/tokens.py` wraps `decryption.py`.
+- Tests: `TESTS/`.
 
-Future ideas: pluggable certificate path/password via env, GUI front-end, stricter validation rules, CI tests.
-
-
-Q: What if the AI outputs incorrect values?
+Future: move orchestrator and uploader implementations fully into `mtr_processor/` so legacy files can be deleted; add env overrides for certificate path/password.

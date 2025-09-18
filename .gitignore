@@ -6,3 +6,5 @@ __pycache__/
 old_scripts/
 scripts/
 certificate/
+output/
+logs/

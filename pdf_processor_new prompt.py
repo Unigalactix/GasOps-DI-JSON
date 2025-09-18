@@ -35,8 +35,36 @@ from dotenv import load_dotenv
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
+import logging
+from logging.handlers import RotatingFileHandler
 
 load_dotenv()
+
+# Logger setup
+def _get_logger() -> logging.Logger:
+    logger = logging.getLogger("pdf_processor")
+    if logger.handlers:
+        return logger
+    logger.setLevel(logging.INFO)
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    logs_dir = os.path.join(script_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    log_path = os.path.join(logs_dir, "pdf_processor.log")
+
+    file_handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=5, encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    console_handler.setLevel(logging.INFO)
+    logger.addHandler(console_handler)
+
+    return logger
+
+
+LOGGER = _get_logger()
 
 try:
     from openpyxl import load_workbook, Workbook
@@ -575,6 +603,10 @@ class APIProcessor:
             auth_token = self.default_auth_token
         
         print(f"Fetching MTR data for HeatNumber: {heat_number}")
+        try:
+            LOGGER.info("Fetch MTR heat=%s", heat_number)
+        except Exception:
+            pass
         
         try:
             # Use embedded API function
@@ -608,11 +640,19 @@ class APIProcessor:
                         try:
                             pdf_data = base64.b64decode(binary_string)
                             print(f"Successfully decoded binary string as base64 ({len(pdf_data)} bytes)")
+                            try:
+                                LOGGER.info("Decoded MTR PDF bytes=%d", len(pdf_data))
+                            except Exception:
+                                pass
                             return pdf_data, company_mtr_file_id
                         except Exception:
                             # Try as raw data if base64 fails
                             pdf_data = binary_string.encode('latin-1') if isinstance(binary_string, str) else binary_string
                             print(f"Using binary string as raw data ({len(pdf_data)} bytes)")
+                            try:
+                                LOGGER.info("Using raw binary data bytes=%d", len(pdf_data))
+                            except Exception:
+                                pass
                             return pdf_data, company_mtr_file_id
                     else:
                         raise RuntimeError("No binary string found in API response")
@@ -620,6 +660,10 @@ class APIProcessor:
                     # Provide helpful debug info when expected object is missing
                     status = tool_result.get("status_code")
                     print(f"Debug: API responded with status {status} but no 'Obj' key or it's empty.")
+                    try:
+                        LOGGER.warning("API status=%s with empty Obj", status)
+                    except Exception:
+                        pass
                     print(f"Debug: Top-level keys: {list(data.keys())}")
                     raise RuntimeError("No MTR data found in API response")
             else:
@@ -636,6 +680,10 @@ class APIProcessor:
                     preview = "<unprintable>"
 
                 print("Invalid API response format detected.")
+                try:
+                    LOGGER.error("Invalid API response format status=%s", status)
+                except Exception:
+                    pass
                 print(f"Status: {status}")
                 print(f"Body preview (first 500 chars):\n{preview}")
 
@@ -651,12 +699,24 @@ class APIProcessor:
                         else:
                             df.write(str(raw).encode('utf-8', errors='ignore'))
                     print(f"Full API response saved to: {debug_path}")
+                    try:
+                        LOGGER.info("Saved debug response: %s", debug_path)
+                    except Exception:
+                        pass
                 except Exception as e2:
                     print(f"Warning: Failed to write debug response file: {e2}")
+                    try:
+                        LOGGER.warning("Failed to write debug response file: %s", e2)
+                    except Exception:
+                        pass
 
                 raise RuntimeError("Invalid API response format")
                 
         except Exception as e:
+            try:
+                LOGGER.exception("Fetch MTR failed")
+            except Exception:
+                pass
             raise RuntimeError(f"Failed to fetch PDF from API: {e}")
     
     def convert_binary_to_pdf(self, binary_string: str, heat_number: str, save_locally: bool = True) -> str:
@@ -671,10 +731,10 @@ class APIProcessor:
                 print(f"Using binary string as raw data for heat number {heat_number}")
 
             if save_locally:
-                # Save to Sample json folder
-                sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
-                os.makedirs(sample_json_dir, exist_ok=True)
-                pdf_path = os.path.join(sample_json_dir, f"{heat_number}.pdf")
+                # Save to output folder
+                default_out = os.path.join(os.path.dirname(__file__), "output")
+                os.makedirs(default_out, exist_ok=True)
+                pdf_path = os.path.join(default_out, f"{heat_number}.pdf")
             else:
                 # Temp directory
                 temp_dir = tempfile.gettempdir()
@@ -684,10 +744,18 @@ class APIProcessor:
                 pdf_file.write(pdf_data)
 
             print(f"PDF file created successfully: {pdf_path}")
+            try:
+                LOGGER.info("PDF saved: %s", pdf_path)
+            except Exception:
+                pass
             return pdf_path
 
         except Exception as e:
             print(f"Failed to convert binary to PDF for heat number {heat_number}: {str(e)}")
+            try:
+                LOGGER.exception("PDF conversion failed for heat=%s", heat_number)
+            except Exception:
+                pass
             raise Exception(f"PDF conversion failed: {str(e)}")
     
     def process_heat_number_to_json(self, heat_number: str, output_dir: Optional[str] = None, auth_token: str = None) -> tuple:
@@ -714,11 +782,15 @@ class APIProcessor:
         if output_dir:
             output_path = os.path.join(output_dir, f"{heat_number}.json")
         else:
-            # Save to Sample json folder by default
-            sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
-            os.makedirs(sample_json_dir, exist_ok=True)
-            output_path = os.path.join(sample_json_dir, f"{heat_number}.json")
+            # Save to output folder by default
+            default_out = os.path.join(os.path.dirname(__file__), "output")
+            os.makedirs(default_out, exist_ok=True)
+            output_path = os.path.join(default_out, f"{heat_number}.json")
         
+        try:
+            LOGGER.info("Prepared temp PDF and output JSON path for heat=%s", heat_number)
+        except Exception:
+            pass
         return temp_pdf_path, output_path, company_mtr_file_id
 
 
@@ -1022,6 +1094,10 @@ class PDFProcessor:
         self._validate_pdf_file(pdf_path)
         
         print(f"Processing PDF file: {pdf_path}")
+        try:
+            LOGGER.info("Process PDF: %s", pdf_path)
+        except Exception:
+            pass
         
         # Step 1: Read PDF file
         with open(pdf_path, 'rb') as f:
@@ -1054,6 +1130,10 @@ class PDFProcessor:
                 print(f"Warning: Failed to update XLSX file: {e}")
         
         print(f"Successfully generated: {final_output_path}")
+        try:
+            LOGGER.info("Generated JSON: %s", final_output_path)
+        except Exception:
+            pass
         return final_output_path
     
     def process_heat_number(self, heat_number: str, output_dir: Optional[str] = None, auth_token: str = None) -> str:
@@ -1073,6 +1153,10 @@ class PDFProcessor:
             raise RuntimeError("API processor not available. Please check requests_pkcs12 installation and certificate configuration.")
         
         print(f"Processing HeatNumber: {heat_number}")
+        try:
+            LOGGER.info("Process heat start: %s", heat_number)
+        except Exception:
+            pass
         
         # Fetch PDF from API with enhanced functionality
         try:
@@ -1101,9 +1185,17 @@ class PDFProcessor:
             except Exception as e:
                 raise RuntimeError(f"Failed to write enforced JSON fields: {e}")
 
+            try:
+                LOGGER.info("Process heat succeeded: %s -> %s", heat_number, result_path)
+            except Exception:
+                pass
             return result_path
             
         except Exception as e:
+            try:
+                LOGGER.exception("Process heat failed: %s", heat_number)
+            except Exception:
+                pass
             raise RuntimeError(f"Failed to process HeatNumber {heat_number}: {e}")
         finally:
             # Clean up temporary PDF file if it exists
@@ -1123,13 +1215,13 @@ class PDFProcessor:
         if output_path:
             final_path = output_path
         else:
-            # Save to Sample json folder by default
-            sample_json_dir = os.path.join(os.path.dirname(__file__), "Sample json")
-            os.makedirs(sample_json_dir, exist_ok=True)
+            # Save to output folder by default
+            default_out = os.path.join(os.path.dirname(__file__), "output")
+            os.makedirs(default_out, exist_ok=True)
             
-            # Use PDF file's name but save in Sample json folder
+            # Use PDF file's name but save in output folder
             base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-            final_path = os.path.join(sample_json_dir, f"{base_name}.json")
+            final_path = os.path.join(default_out, f"{base_name}.json")
         
         # Ensure output directory exists
         os.makedirs(os.path.dirname(final_path), exist_ok=True)
@@ -1172,6 +1264,10 @@ class PDFProcessor:
         # Summary
         print(f"\n{'='*50}")
         print(f"Batch Processing Complete!")
+        try:
+            LOGGER.info("Batch processed: success=%d failed=%d", len(results), len(failed_files))
+        except Exception:
+            pass
         print(f"✅ Successfully processed: {len(results)} files")
         if failed_files:
             print(f"❌ Failed: {len(failed_files)} files")
@@ -1187,6 +1283,10 @@ def main():
     print("Object-Oriented PDF Document Intelligence Processor")
     print("Converts PDF files to structured JSON using AI")
     print("=" * 60)
+    try:
+        LOGGER.info("PDF Processor launcher started")
+    except Exception:
+        pass
     
     try:
         # Initialize processor
@@ -1348,7 +1448,7 @@ def main():
                     print("Using default authentication token")
                 
                 # Ask for output directory
-                output_dir = input("Enter output directory (or press Enter for Sample json folder): ").strip()
+                output_dir = input("Enter output directory (or press Enter for output folder): ").strip()
                 if not output_dir:
                     output_dir = None
                 

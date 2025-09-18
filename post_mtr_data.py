@@ -21,6 +21,8 @@ import base64
 import tempfile
 import requests
 import urllib3
+import logging
+from logging.handlers import RotatingFileHandler
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from pathlib import Path
@@ -35,8 +37,36 @@ except ImportError:
     print("Install with: pip install requests_pkcs12")
     sys.exit(1)
 
+def _get_logger() -> logging.Logger:
+    """Create or return a rotating file logger for this script."""
+    logger = logging.getLogger("mtr_poster")
+    if logger.handlers:
+        return logger
+
+    logger.setLevel(logging.INFO)
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    logs_dir = os.path.join(script_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    log_path = os.path.join(logs_dir, "post_mtr_data.log")
+
+    file_handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=5, encoding="utf-8")
+    file_fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    file_handler.setFormatter(file_fmt)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_fmt = logging.Formatter("%(message)s")
+    console_handler.setFormatter(console_fmt)
+    console_handler.setLevel(logging.INFO)
+    logger.addHandler(console_handler)
+
+    return logger
+
+
+LOGGER = _get_logger()
+
 # Default authentication token - Updated token
-# DEFAULT_AUTH_TOKEN = "OS8xNy8yMDI1IDc6MzM6MzYgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNi8yMDI1IDc6MzM6MzYgUE0mQ0VERU1P"
 encoded_string = os.getenv("encoded_string")
 DEFAULT_AUTH_TOKEN = auth_token(encoded_string)
 
@@ -73,11 +103,14 @@ class MTRDataPoster:
         # Configure SSL warnings
         if not self.ENABLE_SSL_VERIFICATION and self.SUPPRESS_SSL_WARNINGS:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        
+
         print(f"🔐 Initialized MTR Data Poster")
         print(f"📜 Certificate: {self.certificate_path}")
         print(f"🔑 Auth token: {self.auth_token[:20]}...")
         print(f"🔒 SSL Verification: {'Enabled' if self.ENABLE_SSL_VERIFICATION else 'Disabled'}")
+        LOGGER.info("Initialized MTR Data Poster")
+        LOGGER.info("Certificate: %s", self.certificate_path)
+        LOGGER.info("SSL Verification: %s", "Enabled" if self.ENABLE_SSL_VERIFICATION else "Disabled")
     
     def post_mtr_data(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -99,11 +132,13 @@ class MTRDataPoster:
         
         temp_file = None
         try:
+            LOGGER.info("Posting HeatNumber=%s to %s", json_data.get("HeatNumber", "Unknown"), url)
             # Load certificate
             if not os.path.isfile(self.certificate_path):
                 try:
                     cert_bytes = base64.b64decode(self.certificate_path)
                 except Exception as decode_err:
+                    LOGGER.exception("Failed to decode base64 certificate")
                     return {"success": False, "error": f"Failed to decode base64 certificate: {decode_err}"}
                 temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pfx")
                 temp_file.write(cert_bytes)
@@ -129,6 +164,7 @@ class MTRDataPoster:
             # Process response
             try:
                 result = response.json()
+                LOGGER.info("POST status=%s heat=%s", response.status_code, json_data.get("HeatNumber", "Unknown"))
                 return {
                     "success": True, 
                     "data": result, 
@@ -136,6 +172,7 @@ class MTRDataPoster:
                     "heat_number": json_data.get("HeatNumber", "Unknown")
                 }
             except Exception:
+                LOGGER.info("POST (non-JSON) status=%s heat=%s", response.status_code, json_data.get("HeatNumber", "Unknown"))
                 return {
                     "success": True, 
                     "data": response.text, 
@@ -144,6 +181,7 @@ class MTRDataPoster:
                 }
         
         except Exception as e:
+            LOGGER.exception("POST failed for heat=%s", json_data.get("HeatNumber", "Unknown"))
             return {
                 "success": False, 
                 "error": str(e),
@@ -171,11 +209,14 @@ class MTRDataPoster:
         
         if not json_files:
             print(f"⚠️  No JSON files found in: {folder_path}")
+            LOGGER.warning("No JSON files found in: %s", folder_path)
             return []
         
         print(f"📁 Found {len(json_files)} JSON files in: {folder_path}")
+        LOGGER.info("Found %d JSON files in: %s", len(json_files), folder_path)
         for file_path in sorted(json_files):
             print(f"   📄 {os.path.basename(file_path)}")
+            LOGGER.info("Discovered file: %s", os.path.basename(file_path))
         
         return sorted(json_files)
     
@@ -218,11 +259,13 @@ class MTRDataPoster:
         for field in required_fields:
             if field not in json_data:
                 print(f"❌ Validation failed for {os.path.basename(file_path)}: Missing required field '{field}'")
+                LOGGER.error("Validation failed for %s: Missing required field '%s'", os.path.basename(file_path), field)
                 return False
         
         heat_number = json_data.get("HeatNumber")
         if not heat_number or not str(heat_number).strip():
             print(f"❌ Validation failed for {os.path.basename(file_path)}: Empty HeatNumber")
+            LOGGER.error("Validation failed for %s: Empty HeatNumber", os.path.basename(file_path))
             return False
         
         return True
@@ -244,19 +287,22 @@ class MTRDataPoster:
         
         successful_posts = []
         failed_posts = []
-        
+
         print(f"\n🚀 Starting batch POST operation...")
+        LOGGER.info("Starting batch POST operation: %d files", len(json_files))
         print(f"📊 Processing {len(json_files)} JSON files...")
         print("=" * 60)
         
         for i, file_path in enumerate(json_files, 1):
             file_name = os.path.basename(file_path)
             print(f"\n📄 Processing {i}/{len(json_files)}: {file_name}")
+            LOGGER.info("Processing file %d/%d: %s", i, len(json_files), file_name)
             
             try:
                 # Load JSON file
                 json_data, heat_number = self.load_json_file(file_path)
                 print(f"   🔢 Heat Number: {heat_number}")
+                LOGGER.info("Heat Number: %s", heat_number)
                 
                 # Validate JSON data
                 if not self.validate_json_data(json_data, file_path):
@@ -265,29 +311,35 @@ class MTRDataPoster:
                 
                 # Post to API
                 print(f"   📤 Posting to database...")
+                LOGGER.info("Posting heat %s to database", heat_number)
                 result = self.post_mtr_data(json_data)
                 
                 if result.get("success"):
                     if result.get("status_code") == 200:
                         successful_posts.append((heat_number, file_name))
                         print(f"   ✅ Success: Posted {heat_number} to database")
+                        LOGGER.info("Success: Posted %s", heat_number)
                         
                         # Log API response if verbose
                         api_data = result.get("data", {})
                         if isinstance(api_data, dict) and api_data:
                             print(f"   📋 API Response: {str(api_data)[:100]}...")
+                            LOGGER.info("API Response (truncated): %s", str(api_data)[:200])
                     else:
                         failed_posts.append((heat_number, f"HTTP {result.get('status_code')}: {result.get('data', 'Unknown error')}"))
                         print(f"   ❌ Failed: HTTP {result.get('status_code')} - {result.get('data', 'Unknown error')}")
+                        LOGGER.error("Failed: HTTP %s - %s", result.get('status_code'), str(result.get('data', 'Unknown error'))[:200])
                 else:
                     error_msg = result.get("error", "Unknown error")
                     failed_posts.append((heat_number, error_msg))
                     print(f"   ❌ Failed: {error_msg}")
+                    LOGGER.error("Failed: %s", error_msg)
             
             except Exception as e:
                 error_msg = f"Processing error: {str(e)}"
                 failed_posts.append(("Unknown", error_msg))
                 print(f"   ❌ Error: {error_msg}")
+                LOGGER.exception("Processing error for file %s", file_name)
         
         return successful_posts, failed_posts
     
@@ -307,21 +359,25 @@ class MTRDataPoster:
         print(f"📊 Total Files Processed: {total_files}")
         print(f"✅ Successfully Posted: {len(successful_posts)}")
         print(f"❌ Failed to Post: {len(failed_posts)}")
+        LOGGER.info("Batch complete: total=%d success=%d failed=%d", total_files, len(successful_posts), len(failed_posts))
         
         if successful_posts:
             print(f"\n✅ Successful Posts:")
             for heat_number, file_name in successful_posts:
                 print(f"   🔢 {heat_number} ← {file_name}")
+                LOGGER.info("Successful: %s (%s)", heat_number, file_name)
         
         if failed_posts:
             print(f"\n❌ Failed Posts:")
             for heat_number, error in failed_posts:
                 print(f"   🔢 {heat_number}: {error}")
+                LOGGER.error("Failed: %s -> %s", heat_number, error)
         
         # Success rate
         if total_files > 0:
             success_rate = (len(successful_posts) / total_files) * 100
             print(f"\n📈 Success Rate: {success_rate:.1f}%")
+            LOGGER.info("Success rate: %.1f%%", success_rate)
         
         print("=" * 60)
 
@@ -331,38 +387,42 @@ def main():
     print("MTR Data POST Script - JSON to Database Uploader")
     print("Reads JSON files and posts them to database via AddUpdateMTRMetadata API")
     print("=" * 70)
+    LOGGER.info("Launcher started")
     
     try:
         # Initialize the poster
         poster = MTRDataPoster()
-        
-        # Determine the Sample json folder path
+        # Determine default output folder path (where extracted JSONs are saved)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        sample_json_folder = os.path.join(script_dir, "Sample json")
-        
-        # Check if folder exists
+        sample_json_folder = os.path.join(script_dir, "output")
+        LOGGER.info("Using JSON folder: %s", sample_json_folder)
+
+        # Ensure folder exists and guide user if empty
         if not os.path.exists(sample_json_folder):
-            print(f"❌ Error: Sample json folder not found at: {sample_json_folder}")
-            print("💡 Please ensure the 'Sample json' folder exists and contains JSON files to post.")
+            os.makedirs(sample_json_folder, exist_ok=True)
+            print(f"📁 Created output folder: {sample_json_folder}")
+            LOGGER.info("Created output folder: %s", sample_json_folder)
+            print("💡 Place your JSON files in this folder and run again.")
             input("\nPress Enter to exit...")
             return
-        
-        print(f"📁 Sample JSON Folder: {sample_json_folder}")
+
+        print(f"📁 JSON Folder: {sample_json_folder}")
         
         # Interactive mode
         while True:
             print(f"\nSelect an option:")
-            print("1. Process all JSON files in Sample json folder")
+            print("1. Process all JSON files in output folder")
             print("2. Process a specific JSON file")
-            print("3. List JSON files in Sample json folder")
+            print("3. List JSON files in output folder")
             print("4. Test API connection")
             print("5. Exit")
             
             choice = input("\nEnter your choice (1-5): ").strip()
+            LOGGER.info("Menu choice: %s", choice)
             
             if choice == "1":
                 # Process all JSON files
-                print(f"\n🔍 Scanning Sample json folder...")
+                print(f"\n🔍 Scanning output folder...")
                 successful_posts, failed_posts = poster.process_json_files(sample_json_folder)
                 poster.print_summary(successful_posts, failed_posts)
             
@@ -382,6 +442,7 @@ def main():
                     if 0 <= file_index < len(json_files):
                         selected_file = json_files[file_index]
                         print(f"\n📄 Processing: {os.path.basename(selected_file)}")
+                        LOGGER.info("Selected file index=%d name=%s", file_index + 1, os.path.basename(selected_file))
                         
                         # Process single file
                         successful_posts, failed_posts = poster.process_json_files(os.path.dirname(selected_file))
@@ -400,7 +461,7 @@ def main():
                 # List JSON files
                 json_files = poster.find_json_files(sample_json_folder)
                 if json_files:
-                    print(f"\n📋 JSON Files in Sample json folder:")
+                    print(f"\n📋 JSON Files in output folder:")
                     for i, file_path in enumerate(json_files, 1):
                         file_size = os.path.getsize(file_path)
                         file_size_kb = file_size / 1024
@@ -434,9 +495,11 @@ def main():
                     print(f"✅ API connection successful!")
                     print(f"📊 Status Code: {result.get('status_code')}")
                     print(f"📋 Response: {str(result.get('data', ''))[:200]}...")
+                    LOGGER.info("API connection test success: status=%s", result.get('status_code'))
                 else:
                     print(f"❌ API connection failed!")
                     print(f"📋 Error: {result.get('error')}")
+                    LOGGER.error("API connection test failed: %s", result.get('error'))
             
             elif choice == "5":
                 print("\nGoodbye! 👋")
@@ -447,11 +510,13 @@ def main():
     
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")
+        LOGGER.info("Operation cancelled by user")
         sys.exit(0)
     except Exception as e:
         print(f"\nFatal error: {e}")
         import traceback
         traceback.print_exc()
+        LOGGER.exception("Fatal error in launcher")
         input("\nPress Enter to exit...")
         sys.exit(1)
 
