@@ -1,5 +1,5 @@
 {
-  "CompanyMTRFileID": null,
+  "CompanyMTRFileID": 1432,
   "HeatNumber": "802X42540",
   "CertificationDate": "01/29/2013",
   "MatlFacilityDetails": {
@@ -35,10 +35,10 @@
         "HeatB": "0.0003",
         "HeatN": "0.005",
         "HeatCa": "0.0026",
-        "HeatCEPcm": "0.16",
-        "HeatCEPcmCriteria": null,
-        "HeatCEIIW": "0.11",
-        "HeatCEIIWCriteria": null
+        "HeatCEPcm": "",
+        "HeatCEPcmCriteria": "",
+        "HeatCEIIW": "",
+        "HeatCEIIWCriteria": ""
       },
       "HNPipeChemicalCompResults": {
         "Product1C": "0.07",
@@ -76,12 +76,12 @@
         "Product2Ca": "0.0024"
       },
       "HNPipeChemicalEquivResults": {
-        "Product1CEPcm": "0.16",
+        "Product1CEPcm": null,
         "ProductCEPcmCriteria": null,
-        "Product1CEIIW": "0.11",
+        "Product1CEIIW": null,
         "ProductCEIIWCriteria": null,
-        "Product2CEPcm": "0.16",
-        "Product2CEIIW": "0.12"
+        "Product2CEPcm": null,
+        "Product2CEIIW": null
       }
     }
   ]

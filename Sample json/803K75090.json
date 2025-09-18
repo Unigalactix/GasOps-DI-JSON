@@ -1,0 +1,88 @@
+{
+  "CompanyMTRFileID": 1441,
+  "HeatNumber": "803K75090",
+  "CertificationDate": "02/21/2020",
+  "MatlFacilityDetails": {
+    "PipeManufacturerName": "DURA-BOND PIPE, LLC",
+    "PipeManufacturerLocation": "2716 SOUTH FRONT STREET STEELTON, PA 17113"
+  },
+  "HNPipeDetails": [
+    {
+      "PipeNumber": "A4023",
+      "HNPipeTensileTestResults": {
+        "YieldStrength": "68700",
+        "YieldStrengthUnit": "psi",
+        "UltimateTensileStrength": "75400",
+        "UltimateTensileStrengthUnit": "psi",
+        "YTRatio": "0.93",
+        "SeamWeldTensileStrength": null,
+        "SeamWeldTensileStrengthUnits": null
+      },
+      "HNPipeHeatChemicalResults": {
+        "HeatC": "0.08",
+        "HeatMn": "1.58",
+        "HeatP": "0.013",
+        "HeatS": "0.002",
+        "HeatCbNb": "0.030",
+        "HeatSi": "0.30",
+        "HeatTi": "0.013",
+        "HeatCu": "0.02",
+        "HeatNi": "0.01",
+        "HeatMo": "0.04",
+        "HeatCr": "0.008",
+        "HeatV": "0.069",
+        "HeatAl": "0.034",
+        "HeatB": "0.004",
+        "HeatN": "0.0040",
+        "HeatCa": "0.007",
+        "HeatCEPcm": null,
+        "HeatCEPcmCriteria": null,
+        "HeatCEIIW": null,
+        "HeatCEIIWCriteria": null
+      },
+      "HNPipeChemicalCompResults": {
+        "Product1C": "0.08",
+        "Product1Mn": "1.58",
+        "Product1P": "0.013",
+        "Product1S": "0.001",
+        "Product1CbNb": "0.031",
+        "Product1Si": "0.31",
+        "Product1Ti": "0.014",
+        "Product1Cu": "0.02",
+        "Product1Ni": "0.01",
+        "Product1Mo": "0.04",
+        "Product1Cr": "0.008",
+        "Product1V": "0.072",
+        "Product1Al": "0.035",
+        "Product1B": "0.004",
+        "Product1N": "0.0039",
+        "Product1Ca": "0.005",
+        "Product1NbVTi": "0.12",
+        "Product2C": "0.08",
+        "Product2Mn": "1.58",
+        "Product2P": "0.013",
+        "Product2S": "0.002",
+        "Product2CbNb": "0.031",
+        "Product2Si": "0.30",
+        "Product2Ti": "0.014",
+        "Product2Cu": "0.02",
+        "Product2Ni": "0.01",
+        "Product2Mo": "0.04",
+        "Product2Cr": "0.008",
+        "Product2V": "0.072",
+        "Product2Al": "0.034",
+        "Product2B": "0.004",
+        "Product2N": "0.0039",
+        "Product2Ca": "0.006"
+      },
+      "HNPipeChemicalEquivResults": {
+        "Product1CEPcm": null,
+        "ProductCEPcmCriteria": null,
+        "Product1CEIIW": null,
+        "ProductCEIIWCriteria": null,
+        "Product2CEPcm": null,
+        "Product2CEIIW": null
+      }
+    }
+  ]
+}

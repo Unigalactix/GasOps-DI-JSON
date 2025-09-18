@@ -24,6 +24,7 @@ import urllib3
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 from pathlib import Path
+from decryption import auth_token
 
 # Add requests_pkcs12 for certificate authentication
 try:
@@ -35,7 +36,9 @@ except ImportError:
     sys.exit(1)
 
 # Default authentication token - Updated token
-DEFAULT_AUTH_TOKEN = "OS8xNy8yMDI1IDc6MzM6MzYgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNi8yMDI1IDc6MzM6MzYgUE0mQ0VERU1P"
+# DEFAULT_AUTH_TOKEN = "OS8xNy8yMDI1IDc6MzM6MzYgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNi8yMDI1IDc6MzM6MzYgUE0mQ0VERU1P"
+encoded_string = os.getenv("encoded_string")
+DEFAULT_AUTH_TOKEN = auth_token(encoded_string)
 
 # SSL Configuration Options:
 # 1. ENABLE_SSL_VERIFICATION = True (Recommended): Verifies SSL certificates for security

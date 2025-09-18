@@ -21,6 +21,7 @@ Features:
 - Enhanced error handling and logging
 """
 
+from http.client import HTTPException
 import os
 import sys
 import json
@@ -141,9 +142,13 @@ def GetMTRFileDatabyHeatNumber(heat_number=None, company_mtr_file_id=None, auth_
     parameters = {k: v for k, v in parameters.items() if v is not None}
     return call_weld_api("GetMTRFileDatabyHeatNumber", parameters, auth_token)
 
-# Default authentication token
-DEFAULT_AUTH_TOKEN = "OS8xNy8yMDI1IDc6MzM6MzYgUE0mNDgwJkNFREVNT05FVzAzMTQmOS8xNi8yMDI1IDc6MzM6MzYgUE0mQ0VERU1P"
+# Default authentication token (will be set after decoding/generation below)
 
+from decryption import auth_token
+
+# Default authentication token
+encoded_string = os.getenv("encoded_string")
+Default_AUTH_TOKEN = auth_token(encoded_string)
 
 class DocumentIntelligenceOCR:
     """Handles OCR text extraction using Azure Document Intelligence."""
@@ -547,13 +552,13 @@ class APIProcessor:
         self.api_endpoint = "/api/AIMTRMetaData/GetMTRFileDatabyHeatNumber"
         self.pfx_source = "./certificate/oamsapicert2023.pfx"
         self.pfx_password = "password1234"
-        self.default_auth_token = DEFAULT_AUTH_TOKEN
+        self.default_auth_token = Default_AUTH_TOKEN
         
         # Check if certificate exists
         if not os.path.exists(self.pfx_source):
             raise FileNotFoundError(f"Certificate file not found: {self.pfx_source}")
     
-    def fetch_pdf_by_heat_number(self, heat_number: str, auth_token: str = None) -> bytes:
+    def fetch_pdf_by_heat_number(self, heat_number: str, auth_token: str = None) -> tuple:
         """
         Fetch PDF data from API using HeatNumber with enhanced API calling.
         Uses the embedded call_weld_api and GetMTRFileDatabyHeatNumber functions.
@@ -563,7 +568,7 @@ class APIProcessor:
             auth_token: Authentication token (uses default if None)
             
         Returns:
-            PDF file content as bytes
+            Tuple(pdf_bytes: bytes, company_mtr_file_id: str)
         """
         # Use default token if none provided
         if not auth_token:
@@ -588,23 +593,67 @@ class APIProcessor:
                 if "Obj" in data and data["Obj"]:
                     first_obj = data["Obj"][0]
                     binary_string = first_obj.get("BinaryString")
+                    # Try to extract CompanyMTRFileID (robust to case variants)
+                    company_mtr_file_id = first_obj.get("CompanyMTRFileID")
+                    if company_mtr_file_id is None:
+                        for k, v in first_obj.items():
+                            if isinstance(k, str) and k.lower() == "companymtrfileid":
+                                company_mtr_file_id = v
+                                break
+                    if company_mtr_file_id is None:
+                        raise RuntimeError("CompanyMTRFileID not found in API response")
                     
                     if binary_string:
                         # Convert binary string to PDF bytes
                         try:
                             pdf_data = base64.b64decode(binary_string)
                             print(f"Successfully decoded binary string as base64 ({len(pdf_data)} bytes)")
-                            return pdf_data
+                            return pdf_data, company_mtr_file_id
                         except Exception:
                             # Try as raw data if base64 fails
                             pdf_data = binary_string.encode('latin-1') if isinstance(binary_string, str) else binary_string
                             print(f"Using binary string as raw data ({len(pdf_data)} bytes)")
-                            return pdf_data
+                            return pdf_data, company_mtr_file_id
                     else:
                         raise RuntimeError("No binary string found in API response")
                 else:
+                    # Provide helpful debug info when expected object is missing
+                    status = tool_result.get("status_code")
+                    print(f"Debug: API responded with status {status} but no 'Obj' key or it's empty.")
+                    print(f"Debug: Top-level keys: {list(data.keys())}")
                     raise RuntimeError("No MTR data found in API response")
             else:
+                # Log invalid response format details
+                status = tool_result.get("status_code")
+                raw = tool_result.get("data")
+                preview = None
+                try:
+                    if isinstance(raw, (str, bytes)):
+                        preview = (raw[:500] if isinstance(raw, str) else raw.decode(errors='ignore')[:500])
+                    else:
+                        preview = str(raw)[:500]
+                except Exception:
+                    preview = "<unprintable>"
+
+                print("Invalid API response format detected.")
+                print(f"Status: {status}")
+                print(f"Body preview (first 500 chars):\n{preview}")
+
+                # Write full response to a debug file for inspection
+                try:
+                    debug_dir = os.path.join(os.path.dirname(__file__), "debug")
+                    os.makedirs(debug_dir, exist_ok=True)
+                    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    debug_path = os.path.join(debug_dir, f"api_response_{heat_number}_{ts}.txt")
+                    with open(debug_path, 'wb') as df:
+                        if isinstance(raw, bytes):
+                            df.write(raw)
+                        else:
+                            df.write(str(raw).encode('utf-8', errors='ignore'))
+                    print(f"Full API response saved to: {debug_path}")
+                except Exception as e2:
+                    print(f"Warning: Failed to write debug response file: {e2}")
+
                 raise RuntimeError("Invalid API response format")
                 
         except Exception as e:
@@ -651,10 +700,10 @@ class APIProcessor:
             auth_token: Authentication token (uses default if None)
             
         Returns:
-            Tuple of (temp_pdf_path, output_json_path)
+            Tuple of (temp_pdf_path, output_json_path, company_mtr_file_id)
         """
         # Fetch PDF data from API using enhanced method
-        pdf_content = self.fetch_pdf_by_heat_number(heat_number, auth_token)
+        pdf_content, company_mtr_file_id = self.fetch_pdf_by_heat_number(heat_number, auth_token)
         
         # Create temporary PDF file
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_pdf:
@@ -670,7 +719,7 @@ class APIProcessor:
             os.makedirs(sample_json_dir, exist_ok=True)
             output_path = os.path.join(sample_json_dir, f"{heat_number}.json")
         
-        return temp_pdf_path, output_path
+        return temp_pdf_path, output_path, company_mtr_file_id
 
 
 class XLSXProcessor:
@@ -1027,10 +1076,31 @@ class PDFProcessor:
         
         # Fetch PDF from API with enhanced functionality
         try:
-            temp_pdf_path, output_path = self.api_processor.process_heat_number_to_json(heat_number, output_dir, auth_token)
+            temp_pdf_path, output_path, company_mtr_file_id = self.api_processor.process_heat_number_to_json(heat_number, output_dir, auth_token)
             
             # Process the temporary PDF file through the normal workflow
             result_path = self.process_pdf(temp_pdf_path, output_path)
+
+            # Enforce mandatory fields in the generated JSON
+            try:
+                with open(result_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load generated JSON for enforcement: {e}")
+
+            # Inject or overwrite mandatory fields
+            data['CompanyMTRFileID'] = company_mtr_file_id
+            # Ensure HeatNumber is set
+            if not data.get('HeatNumber'):
+                data['HeatNumber'] = heat_number
+
+            # Save back
+            try:
+                with open(result_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                raise RuntimeError(f"Failed to write enforced JSON fields: {e}")
+
             return result_path
             
         except Exception as e:
@@ -1264,9 +1334,16 @@ def main():
                     continue
                 
                 # Ask for authentication token (optional)
-                print(f"Default token available: {DEFAULT_AUTH_TOKEN[:20]}...")
-                auth_token = input("Enter auth token (or press Enter to use default): ").strip()
-                if not auth_token:
+                default_preview = (
+                    (Default_AUTH_TOKEN[:20] + "...")
+                    if isinstance(Default_AUTH_TOKEN, str) and Default_AUTH_TOKEN
+                    else "(none)"
+                )
+                print(f"Default token available: {default_preview}")
+                user_token_input = input("Enter auth token (or press Enter to use default): ").strip()
+                if user_token_input:
+                    auth_token = user_token_input
+                else:
                     auth_token = None
                     print("Using default authentication token")
                 

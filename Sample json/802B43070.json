@@ -1,5 +1,5 @@
 {
-  "CompanyMTRFileID": null,
+  "CompanyMTRFileID": 1431,
   "HeatNumber": "802B43070",
   "CertificationDate": "08/21/2008",
   "MatlFacilityDetails": {
@@ -10,9 +10,9 @@
     {
       "PipeNumber": "C9013",
       "HNPipeTensileTestResults": {
-        "YieldStrength": "60000",
+        "YieldStrength": "78200",
         "YieldStrengthUnit": "PSI",
-        "UltimateTensileStrength": "75000",
+        "UltimateTensileStrength": "86800",
         "UltimateTensileStrengthUnit": "PSI",
         "YTRatio": "0.93",
         "SeamWeldTensileStrength": "87800",
